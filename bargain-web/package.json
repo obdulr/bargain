@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 4030",
     "build": "next build",
-    "start": "next start -p $PORT",
+    "start": "next start -p 4030",
     "lint": "next lint",
     "clean": "rm -rf .next node_modules"
   },

@@ -80,10 +80,12 @@ Or run individually:
 # Frontend (Next.js)
 cd bargain-web
 pnpm run dev
+# Visit http://localhost:4030
 
 # Backend (FastAPI)
 cd bargain-api
 uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
+# Visit http://localhost:4030/docs for API docs
 ```
 
 ### Build

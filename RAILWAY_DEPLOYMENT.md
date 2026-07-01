@@ -106,8 +106,8 @@ alembic upgrade head
 3. Select the same repository
 4. Click "Settings" → "General"
 5. Set **Root Directory** to: `bargain-web`
-6. Set **Start Command** to: `next start -p $PORT`
-7. Set **Port** to: `3000`
+6. Set **Start Command** to: `pnpm start`
+7. Set **Port** to: `4030`
 
 ### Configure Frontend Environment Variables
 

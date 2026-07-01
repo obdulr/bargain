@@ -65,7 +65,7 @@ npm run dev
 ```bash
 cd bargain-web
 pnpm run dev
-# Visit http://localhost:3000
+# Visit http://localhost:4030
 ```
 
 **Backend:**
@@ -134,9 +134,6 @@ const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/endpoint
 
 ### Port Already in Use
 ```bash
-# Kill process on port 3000
-lsof -ti:3000 | xargs kill -9
-
 # Kill process on port 4030
 lsof -ti:4030 | xargs kill -9
 ```
