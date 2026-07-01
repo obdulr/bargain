@@ -1,0 +1,3 @@
+packages:
+  - 'bargain-web'
+  - 'packages/*'

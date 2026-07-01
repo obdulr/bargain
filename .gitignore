@@ -59,6 +59,3 @@ ENV/
 *.swp
 *.swo
 *~
-
-# Railway
-railway.toml
