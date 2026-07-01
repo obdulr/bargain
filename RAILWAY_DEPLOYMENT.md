@@ -6,6 +6,7 @@ This guide covers deploying BargainHuntrs to Railway for both frontend and backe
 
 - Railway account ([railway.app](https://railway.app))
 - GitHub account with BargainHuntrs repository
+- pnpm >= 8.0.0 (package manager)
 - Stripe account (for payments)
 - Firebase account (for SMS/push)
 - Resend account (for email)

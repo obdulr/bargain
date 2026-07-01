@@ -2,15 +2,20 @@
 
 ## Local Development Setup
 
-### 1. Install Root Dependencies
+### 1. Install pnpm (if not already installed)
 ```bash
-npm install
+npm install -g pnpm
 ```
 
-### 2. Frontend Setup
+### 2. Install Root Dependencies
+```bash
+pnpm install
+```
+
+### 3. Frontend Setup
 ```bash
 cd bargain-web
-npm install
+pnpm install
 cp .env.example .env.local
 ```
 
@@ -19,7 +24,7 @@ Edit `.env.local`:
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-### 3. Backend Setup
+### 4. Backend Setup
 ```bash
 cd bargain-api
 python -m venv venv
@@ -34,7 +39,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/bargainhuntrs
 SECRET_KEY=dev-secret-key-change-in-production
 ```
 
-### 4. Database Setup (Railway)
+### 5. Database Setup (Railway)
 1. Create Railway account
 2. Create new PostgreSQL project
 3. Copy connection string to `.env`
