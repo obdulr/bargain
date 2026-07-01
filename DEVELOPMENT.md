@@ -64,7 +64,7 @@ npm run dev
 **Frontend:**
 ```bash
 cd bargain-web
-npm run dev
+pnpm run dev
 # Visit http://localhost:3000
 ```
 
@@ -72,8 +72,8 @@ npm run dev
 ```bash
 cd bargain-api
 source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# Visit http://localhost:8000/docs for API docs
+uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
+# Visit http://localhost:4030/docs for API docs
 ```
 
 ## Common Tasks
@@ -137,8 +137,8 @@ const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/endpoint
 # Kill process on port 3000
 lsof -ti:3000 | xargs kill -9
 
-# Kill process on port 8000
-lsof -ti:8000 | xargs kill -9
+# Kill process on port 4030
+lsof -ti:4030 | xargs kill -9
 ```
 
 ### Python Virtual Environment Issues

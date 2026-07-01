@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     USER_AGENT: str = "Mozilla/5.0 (compatible; BargainHuntrs/1.0; +https://bargainhuntrs.com)"
     
     # Railway (set automatically)
-    PORT: int = 8000
+    PORT: int = 4030
     RAILWAY_ENVIRONMENT: Optional[str] = None
     RAILWAY_PROJECT_NAME: Optional[str] = None
     RAILWAY_SERVICE_NAME: Optional[str] = None

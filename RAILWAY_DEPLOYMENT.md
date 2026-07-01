@@ -36,7 +36,8 @@ Railway Project: BargainHuntrs
 3. Select the same repository
 4. Click "Settings" → "General"
 5. Set **Root Directory** to: `bargain-api`
-6. Set **Start Command** to: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+6. Set **Start Command** to: `uvicorn app.main:app --host 0.0.0.0 --port 4030`
+7. Set **Port** to: `4030`
 
 ### Add PostgreSQL Database
 
@@ -75,7 +76,7 @@ FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
 RESEND_API_KEY=re_your_resend_api_key
 
 # Railway (automatically set)
-PORT=8000
+PORT=4030
 ```
 
 ### Run Database Migrations

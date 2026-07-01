@@ -79,17 +79,17 @@ Or run individually:
 ```bash
 # Frontend (Next.js)
 cd bargain-web
-npm run dev
+pnpm run dev
 
 # Backend (FastAPI)
 cd bargain-api
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
 ```
 
 ### Build
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 ### Lint & Format
@@ -168,7 +168,7 @@ Core tables (PostgreSQL):
 
 ### Frontend (.env.local)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:4030
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 ```
 
@@ -186,7 +186,7 @@ FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
 ```bash
 # Frontend
 cd bargain-web
-npm test
+pnpm test
 
 # Backend
 cd bargain-api
