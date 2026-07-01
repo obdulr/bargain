@@ -1,0 +1,11 @@
+{
+  "name": "@bargain-huntrs/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "eslint-next.js",
+    "prettier.js",
+    "tsconfig.json"
+  ]
+}
