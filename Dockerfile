@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# CACHE BUST: 2026-06-30 - Force Railway snapshot cache invalidation
+# CACHE BUST: 2026-07-03 - Force Railway snapshot cache invalidation
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY bargain-api ./bargain-api
 
-# Force rebuild timestamp: 2025-06-30T00:00:00Z
+# Force rebuild timestamp: 2025-07-03T00:00:00Z
 RUN echo "Force rebuild for FastAPI deployment"
 
 ENV PYTHONUNBUFFERED=1
