@@ -8,5 +8,7 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://api.bargainhuntrs.com
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        value: pk_live_51R1DRCGjfcTjkbiAVgEeGkRC5Kix5TuNqR6G3UJn4qo2vNzkGwVfBXjTE98D7RWDFBvpGAVJfNj76scfTIxDbBfR00miZOCTx3
       - key: NODE_VERSION
         value: 24
