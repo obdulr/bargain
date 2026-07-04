@@ -10,5 +10,19 @@ services:
         value: https://api.bargainhuntrs.com
       - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
         value: pk_live_51R1DRCGjfcTjkbiAVgEeGkRC5Kix5TuNqR6G3UJn4qo2vNzkGwVfBXjTE98D7RWDFBvpGAVJfNj76scfTIxDbBfR00miZOCTx3
+      - key: NEXT_PUBLIC_FIREBASE_API_KEY
+        value: AIzaSyDWt8Zk1t0mjmDOP0QszVBbPG2a4Tnnx58
+      - key: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+        value: bargainhuntrs-a57ec.firebaseapp.com
+      - key: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        value: bargainhuntrs-a57ec
+      - key: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+        value: bargainhuntrs-a57ec.firebasestorage.app
+      - key: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+        value: '809115335784'
+      - key: NEXT_PUBLIC_FIREBASE_APP_ID
+        value: 1:809115335784:web:a41b07b345655901498fdd
+      - key: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+        value: G-QMRZRBY03F
       - key: NODE_VERSION
         value: 24

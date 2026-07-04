@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+import json
 
 
 class Settings(BaseSettings):
@@ -30,6 +31,18 @@ class Settings(BaseSettings):
     
     # Firebase
     FIREBASE_CREDENTIALS_PATH: str = ""
+    FIREBASE_CREDENTIALS_JSON: Optional[Dict[str, Any]] = None
+    
+    @field_validator("FIREBASE_CREDENTIALS_JSON", mode="before")
+    @classmethod
+    def parse_firebase_credentials_json(cls, v):
+        """Parse Firebase service account JSON if provided as a string."""
+        if isinstance(v, str) and v:
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
     
     # Resend (Email)
     RESEND_API_KEY: str = ""
