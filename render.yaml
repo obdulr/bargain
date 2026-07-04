@@ -7,6 +7,6 @@ services:
     startCommand: sh -c "cd bargain-web && pnpm run start"
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://bargainhuntrs.com
+        value: https://api.bargainhuntrs.com
       - key: NODE_VERSION
         value: 24
