@@ -1,6 +1,6 @@
 FROM node:24-slim
 
-# CACHE BUST: 2025-06-30 - Force Railway snapshot cache invalidation
+# CACHE BUST: 2026-07-03 - Force Railway snapshot cache invalidation
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Force rebuild timestamp: 2025-06-30T00:00:00Z
+# Force rebuild timestamp: 2025-07-03T00:00:00Z
 RUN echo "Force rebuild for Next.js deployment"
 
 # Remove any stale .next folder to ensure fresh build
@@ -28,4 +28,4 @@ RUN pnpm run build
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["pnpm", "start"]
+CMD ["node", ".next/standalone/server.js"]
