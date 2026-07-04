@@ -1,10 +1,19 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import List, Optional
 
 
 class Settings(BaseSettings):
     # Database (Railway provides DATABASE_URL automatically)
     DATABASE_URL: str = "sqlite:///./bargain.db"
+    
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def convert_to_asyncpg(cls, v: str) -> str:
+        """Convert Railway's default postgresql:// URL to asyncpg driver format."""
+        if v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     
     # API
     API_V1_PREFIX: str = "/api/v1"
