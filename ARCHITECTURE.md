@@ -7,7 +7,8 @@
 │                         User Interface                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
 │  │   Next.js Web    │  │   Mobile App     │  │   Admin UI   │  │
-│  │   (Vercel)       │  │   (Future)       │  │   (Future)   │  │
+│  │   (Render)       │  │   (Future)       │  │   (Future)   │  │
+│  │   Port 3030      │  │                  │  │              │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────┬───────┘  │
 └───────────┼────────────────────┼────────────────────┼───────────┘
             │                    │                    │
@@ -15,12 +16,8 @@
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      API Gateway / Load Balancer                 │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
 │                    FastAPI Backend (Railway)                     │
+│                    bargainhuntrs.com:4030                         │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │  │
 │  │  │   Auth   │  │  Alerts  │  │ Pricing  │  │ Payments │  │  │
@@ -51,7 +48,9 @@
 - **Styling**: Tailwind CSS 4
 - **State Management**: React Context / Zustand (future)
 - **Authentication**: NextAuth.js or Clerk
-- **Deployment**: Vercel
+- **Port**: 3030
+- **Deployment**: Render (free tier)
+- **Package Manager**: pnpm 9.15.5 (PERMANENT)
 
 ### Backend (bargain-api)
 - **Framework**: FastAPI
@@ -59,7 +58,9 @@
 - **ORM**: SQLAlchemy 2.0 (async)
 - **Authentication**: JWT tokens
 - **Task Queue**: Celery + Redis (future)
+- **Port**: 4030
 - **Deployment**: Railway
+- **Domain**: bargainhuntrs.com
 
 ### Database Schema
 

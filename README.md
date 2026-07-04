@@ -13,8 +13,9 @@ This is a monorepo built with:
 - **Storage**: Supabase (files/images)
 - **Payments**: Stripe
 - **Alerts**: Resend (email) + Firebase (SMS/push)
-- **Hosting**: Railway (frontend + backend + database)
+- **Hosting**: Railway (backend) + Render (frontend)
 - **Monorepo Tooling**: Turborepo
+- **Package Manager**: pnpm 9.15.5 (PERMANENT - do not change)
 
 ## 📁 Project Structure
 
@@ -34,8 +35,8 @@ bargain/
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
-- npm >= 9.0.0
+- Node.js >= 24.0.0
+- pnpm >= 9.15.5 (PERMANENT - do not use npm)
 - Python >= 3.11
 - PostgreSQL (via Railway)
 
@@ -44,13 +45,12 @@ bargain/
 1. **Clone and install dependencies:**
 ```bash
 cd /Volumes/Os_Sites/bargain
-npm install
+pnpm install
 ```
 
 2. **Set up frontend:**
 ```bash
 cd bargain-web
-npm install
 cp .env.example .env.local
 # Edit .env.local with your configuration
 ```
@@ -71,18 +71,18 @@ Run all services in development mode:
 
 ```bash
 # From root
-npm run dev
+pnpm run dev
 ```
 
 Or run individually:
 
 ```bash
-# Frontend (Next.js)
+# Frontend (Next.js) - Port 3030
 cd bargain-web
 pnpm run dev
-# Visit http://localhost:4030
+# Visit http://localhost:3030
 
-# Backend (FastAPI)
+# Backend (FastAPI) - Port 4030
 cd bargain-api
 uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
 # Visit http://localhost:4030/docs for API docs
@@ -97,8 +97,8 @@ pnpm run build
 ### Lint & Format
 
 ```bash
-npm run lint
-npm run format
+pnpm run lint
+pnpm run format
 ```
 
 ## 🎯 Features (Phased Rollout)
@@ -141,14 +141,18 @@ npm run format
 - **Styling**: Tailwind CSS 4
 - **Language**: TypeScript
 - **Auth**: NextAuth.js / Clerk
-- **Deployment**: Railway
+- **Port**: 3030
+- **Deployment**: Render (free tier)
+- **Package Manager**: pnpm 9.15.5
 
 ### Backend (bargain-api)
 - **Framework**: FastAPI
 - **Database**: PostgreSQL (Railway)
 - **ORM**: SQLAlchemy 2.0 (async)
 - **Authentication**: JWT (python-jose)
+- **Port**: 4030
 - **Deployment**: Railway
+- **Domain**: bargainhuntrs.com
 
 ### Integrations
 - **Payments**: Stripe API
@@ -197,39 +201,55 @@ pytest
 
 ## 📦 Deployment
 
-### Full Railway Deployment
-See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed instructions.
+### Current Deployment Architecture
+- **Backend**: Railway (bargainhuntrs.com:4030)
+- **Frontend**: Render (bargain-web.onrender.com:3030)
+- **Package Manager**: pnpm 9.15.5 (PERMANENT - never use npm)
 
-Quick start:
+### Backend Deployment (Railway)
+The backend is already deployed on Railway at bargainhuntrs.com.
+
+**Configuration:**
+- Root Directory: `bargain-api`
+- Port: 4030
+- Domain: bargainhuntrs.com
+- Dockerfile: Root Dockerfile with Python 3.11
+
+**Environment Variables:**
+- `DATABASE_URL` (PostgreSQL connection string)
+- `PORT=4030`
+
+### Frontend Deployment (Render)
+The frontend is deployed on Render using the render.yaml configuration.
+
+**Configuration:**
+- Root Directory: `bargain-web`
+- Port: 3030
+- Build Command: `corepack enable && corepack prepare pnpm@9.15.5 --activate && pnpm install --frozen-lockfile=false && pnpm run build`
+- Start Command: `cd bargain-web && pnpm start`
+
+**Environment Variables:**
+- `NEXT_PUBLIC_API_URL=https://bargainhuntrs.com`
+- `NODE_VERSION=24`
+
+**Important:**
+- Always use pnpm, never npm
+- Corepack must be enabled for pnpm support
+- Lockfile compatibility handled with `--frozen-lockfile=false`
+
+### Manual Deployment
+
+**To update backend:**
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login to Railway
-railway login
-
-# Initialize project
-railway init
-
-# Deploy backend
-cd bargain-api
-railway up
-
-# Deploy frontend
-cd ../bargain-web
-railway up
+git push origin main
+# Railway auto-deploys from main branch
 ```
 
-### Manual Railway Setup
-1. Create Railway project at [railway.app](https://railway.app)
-2. Connect GitHub repository
-3. Create 3 services:
-   - `bargain-api` (root: `bargain-api`, port: 8000)
-   - `bargain-web` (root: `bargain-web`, port: 3000)
-   - PostgreSQL database
-4. Configure environment variables (see RAILWAY_DEPLOYMENT.md)
-5. Run database migrations via Railway console
-6. Deploy both services
+**To update frontend:**
+```bash
+git push origin main
+# Render auto-deploys from main branch
+```
 
 ## 🤝 Contributing
 

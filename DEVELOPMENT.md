@@ -1,10 +1,13 @@
 # Development Guide
 
+## ⚠️ IMPORTANT: Package Manager
+**PERMANENT RULE: Always use pnpm 9.15.5 - NEVER use npm**
+
 ## Local Development Setup
 
 ### 1. Install pnpm (if not already installed)
 ```bash
-npm install -g pnpm
+npm install -g pnpm@9.15.5
 ```
 
 ### 2. Install Root Dependencies
@@ -15,13 +18,12 @@ pnpm install
 ### 3. Frontend Setup
 ```bash
 cd bargain-web
-pnpm install
 cp .env.example .env.local
 ```
 
 Edit `.env.local`:
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=https://bargainhuntrs.com
 ```
 
 ### 4. Backend Setup
@@ -56,19 +58,19 @@ docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:15
 
 ### All Services (from root)
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ### Individual Services
 
-**Frontend:**
+**Frontend (Port 3030):**
 ```bash
 cd bargain-web
 pnpm run dev
-# Visit http://localhost:4030
+# Visit http://localhost:3030
 ```
 
-**Backend:**
+**Backend (Port 4030):**
 ```bash
 cd bargain-api
 source venv/bin/activate
@@ -83,22 +85,22 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
 cd packages/shared
 # Edit src/index.ts
 cd ../..
-npm run build
+pnpm run build
 ```
 
 ### Run Linting
 ```bash
-npm run lint
+pnpm run lint
 ```
 
 ### Format Code
 ```bash
-npm run format
+pnpm run format
 ```
 
 ### Clean Everything
 ```bash
-npm run clean
+pnpm run clean
 ```
 
 ## API Development
@@ -134,7 +136,10 @@ const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/endpoint
 
 ### Port Already in Use
 ```bash
-# Kill process on port 4030
+# Kill process on port 3030 (frontend)
+lsof -ti:3030 | xargs kill -9
+
+# Kill process on port 4030 (backend)
 lsof -ti:4030 | xargs kill -9
 ```
 
@@ -150,23 +155,49 @@ pip install -r requirements.txt
 
 ### Node Modules Issues
 ```bash
-# Clean and reinstall
-rm -rf node_modules package-lock.json
-npm install
+# Clean and reinstall (ALWAYS use pnpm)
+rm -rf node_modules
+pnpm install
 ```
 
 ## Production Deployment
 
-### Full Railway Deployment
-See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for complete guide.
+### Current Deployment Architecture
+- **Backend**: Railway (bargainhuntrs.com:4030)
+- **Frontend**: Render (bargain-web.onrender.com:3030)
+- **Package Manager**: pnpm 9.15.5 (PERMANENT)
 
-### Quick Railway Setup
-1. Create Railway account at [railway.app](https://railway.app)
-2. Create new project from GitHub repo
-3. Add 3 services:
-   - **bargain-api**: Root `bargain-api`, Port 8000, Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - **bargain-web**: Root `bargain-web`, Port 3000, Start `next start -p $PORT`
-   - **PostgreSQL**: Database service
-4. Configure environment variables (see RAILWAY_DEPLOYMENT.md)
-5. Run migrations: `alembic upgrade head` in backend console
-6. Deploy all services
+### Backend Deployment (Railway)
+The backend is already deployed on Railway.
+
+**Configuration:**
+- Root Directory: `bargain-api`
+- Port: 4030
+- Domain: bargainhuntrs.com
+- Dockerfile: Root Dockerfile with Python 3.11
+
+**To update:**
+```bash
+git push origin main
+# Railway auto-deploys from main branch
+```
+
+### Frontend Deployment (Render)
+The frontend is deployed on Render using render.yaml.
+
+**Configuration:**
+- Root Directory: `bargain-web`
+- Port: 3030
+- Build Command: `corepack enable && corepack prepare pnpm@9.15.5 --activate && pnpm install --frozen-lockfile=false && pnpm run build`
+- Start Command: `cd bargain-web && pnpm start`
+
+**To update:**
+```bash
+git push origin main
+# Render auto-deploys from main branch
+```
+
+**Important for Render:**
+- Always use pnpm, never npm
+- Corepack must be enabled for pnpm support
+- Lockfile compatibility handled with `--frozen-lockfile=false`
