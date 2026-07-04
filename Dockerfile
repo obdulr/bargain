@@ -20,6 +20,10 @@ COPY bargain-api ./bargain-api
 RUN echo "Force rebuild for FastAPI deployment"
 
 ENV PYTHONUNBUFFERED=1
+
+# Change to app directory before starting
+WORKDIR /app/bargain-api
+
 EXPOSE 4030
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4030"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
