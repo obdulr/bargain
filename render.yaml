@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: bargain-web
+    env: node
+    plan: free
+    buildCommand: pnpm install && pnpm run build
+    startCommand: cd bargain-web && pnpm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://bargainhuntrs.com
+      - key: NODE_VERSION
+        value: 24
+      - key: PNPM_VERSION
+        value: 9.15.5
