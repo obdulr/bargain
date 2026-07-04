@@ -4,7 +4,7 @@ from typing import List, Optional
 
 class Settings(BaseSettings):
     # Database (Railway provides DATABASE_URL automatically)
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/bargainhuntrs"
+    DATABASE_URL: str = "sqlite:///./bargain.db"
     
     # API
     API_V1_PREFIX: str = "/api/v1"
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # CORS (Railway frontend URL will be added dynamically)
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://bargainhuntrs.com"]
+    ALLOWED_ORIGINS: List[str] = ["*"]
     
     # Stripe
     STRIPE_API_KEY: str = ""
