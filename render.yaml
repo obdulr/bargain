@@ -3,12 +3,10 @@ services:
     name: bargain-web
     env: node
     plan: free
-    buildCommand: pnpm install && pnpm run build
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.5 --activate && pnpm install && pnpm run build
     startCommand: cd bargain-web && pnpm start
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://bargainhuntrs.com
       - key: NODE_VERSION
         value: 24
-      - key: PNPM_VERSION
-        value: 9.15.5
