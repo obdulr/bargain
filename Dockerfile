@@ -26,4 +26,4 @@ WORKDIR /app/bargain-api
 
 EXPOSE 4030
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4030"]
