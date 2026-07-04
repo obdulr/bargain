@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# CACHE BUST: 2026-07-03 - Force Railway snapshot cache invalidation
+# CACHE BUST: 2026-07-04 - Force Railway snapshot cache invalidation
 
 WORKDIR /app
 
@@ -16,14 +16,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY bargain-api ./bargain-api
 
-# Force rebuild timestamp: 2025-07-03T00:00:00Z
+# Force rebuild timestamp: 2025-07-04T00:00:00Z
 RUN echo "Force rebuild for FastAPI deployment"
 
 ENV PYTHONUNBUFFERED=1
+ENV PORT=4030
 
 # Change to app directory before starting
 WORKDIR /app/bargain-api
 
 EXPOSE 4030
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4030"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-4030}"]
