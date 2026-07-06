@@ -9,10 +9,16 @@ class Settings(BaseSettings):
     
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
-    def convert_to_asyncpg(cls, v: str) -> str:
-        """Convert Railway's default postgresql:// URL to asyncpg driver format."""
-        if v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+    def convert_to_psycopg2(cls, v: str) -> str:
+        """Convert Railway's default postgresql:// URL to psycopg2 driver format.
+
+        The codebase uses synchronous SQLAlchemy (create_engine/Session), so we
+        normalize to the psycopg2 driver rather than asyncpg.
+        """
+        if v.startswith("postgresql+asyncpg://"):
+            return v.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        if v.startswith("postgresql://") and not v.startswith("postgresql+psycopg2://"):
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
         return v
     
     # API

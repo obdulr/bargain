@@ -148,6 +148,20 @@ async def profile(current_user: User = Depends(get_current_user)):
     }
 
 
+@router.get("/me")
+async def me(current_user: User = Depends(get_current_user)):
+    """Alias for /profile that the frontend calls as /api/v1/auth/me."""
+    return {
+        "success": True,
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "firstName": current_user.first_name,
+        "lastName": current_user.last_name,
+        "role": current_user.role,
+        "subscriptionTier": current_user.subscription_tier,
+    }
+
+
 @router.post("/refresh")
 async def refresh(body: TokenRequest, db: Session = Depends(get_db)):
     try:

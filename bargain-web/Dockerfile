@@ -5,7 +5,7 @@ FROM node:24-slim
 WORKDIR /app
 
 # Pin pnpm to v9 to avoid pnpm v11 "approve-builds" prompts in CI.
-RUN corepack enable && corepack prepare pnpm@9.15.1 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 
 # Copy workspace manifests first (better caching)
 COPY package.json pnpm-lock.yaml ./
