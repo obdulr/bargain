@@ -7,7 +7,7 @@ import { authService } from "@/lib/authService";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
-export default function SignupPage() {
+export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,11 +18,11 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const result = await authService.register({ email, password });
+    const result = await authService.login({ email, password });
     if (result.success) {
       router.push("/dashboard");
     } else {
-      setError(result.error || "Signup failed");
+      setError(result.error || "Login failed");
     }
     setLoading(false);
   }
@@ -45,10 +45,10 @@ export default function SignupPage() {
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-6">
               <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Create your account
+                Welcome back
               </h1>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Start finding arbitrage deals today
+                Sign in to your BargainHuntrs account
               </p>
             </div>
 
@@ -78,25 +78,23 @@ export default function SignupPage() {
               </div>
 
               <div>
-                <label
-                  htmlFor="password"
-                  className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5"
-                >
-                  Password
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="password"
+                    className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Password
+                  </label>
+                </div>
                 <input
                   id="password"
                   type="password"
                   required
-                  minLength={6}
-                  autoComplete="new-password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-600"
                 />
-                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-600">
-                  Must be at least 6 characters.
-                </p>
               </div>
 
               <button
@@ -104,23 +102,23 @@ export default function SignupPage() {
                 disabled={loading}
                 className="w-full rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-sm"
               >
-                {loading ? "Creating account…" : "Create account"}
+                {loading ? "Signing in…" : "Sign in"}
               </button>
             </form>
 
             <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-              Already have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link
-                href="/login"
+                href="/signup"
                 className="font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
               >
-                Sign in
+                Get started free
               </Link>
             </p>
           </div>
 
           <p className="mt-6 text-center text-xs text-zinc-400 dark:text-zinc-600">
-            By signing up you agree to our{" "}
+            By signing in you agree to our{" "}
             <Link href="/terms" className="underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-50">
               Terms
             </Link>{" "}

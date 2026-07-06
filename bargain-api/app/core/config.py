@@ -1,7 +1,6 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
-from typing import List, Optional, Dict, Any
-import json
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -29,21 +28,6 @@ class Settings(BaseSettings):
     STRIPE_API_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     
-    # Firebase
-    FIREBASE_CREDENTIALS_PATH: str = ""
-    FIREBASE_CREDENTIALS_JSON: Optional[Dict[str, Any]] = None
-    
-    @field_validator("FIREBASE_CREDENTIALS_JSON", mode="before")
-    @classmethod
-    def parse_firebase_credentials_json(cls, v):
-        """Parse Firebase service account JSON if provided as a string."""
-        if isinstance(v, str) and v:
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                return None
-        return v
-    
     # Resend (Email)
     RESEND_API_KEY: str = ""
     
@@ -56,9 +40,7 @@ class Settings(BaseSettings):
     RAILWAY_PROJECT_NAME: Optional[str] = None
     RAILWAY_SERVICE_NAME: Optional[str] = None
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 
 settings = Settings()

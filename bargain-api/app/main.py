@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers import auth, watchlist, waitlist
+
 app = FastAPI(
     title="BargainHuntrs API",
     description="Arbitrage intelligence platform API",
@@ -26,6 +28,10 @@ except Exception:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+app.include_router(auth.router)
+app.include_router(watchlist.router)
+app.include_router(waitlist.router)
 
 
 @app.get("/")
