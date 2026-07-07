@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, watchlist, waitlist, arbitrage
+from app.routers.alerts import router as alerts_router, scheduler_router
+from app.services.scheduler import scheduler
+from app.core.config import settings
 
 app = FastAPI(
     title="BargainHuntrs API",
@@ -11,7 +14,6 @@ app = FastAPI(
 
 # Add CORS middleware with fallback
 try:
-    from app.core.config import settings
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
@@ -33,6 +35,26 @@ app.include_router(auth.router)
 app.include_router(watchlist.router)
 app.include_router(waitlist.router)
 app.include_router(arbitrage.router)
+app.include_router(alerts_router)
+app.include_router(scheduler_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the background scanner on app startup if AUTO_SCAN is enabled."""
+    if settings.AUTO_SCAN:
+        scheduler.start()
+        print(f"[Startup] Auto-scan enabled — scheduler started (interval: {settings.SCAN_INTERVAL_MINUTES}min)")
+    else:
+        print("[Startup] Auto-scan disabled — scheduler not started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the background scanner on app shutdown."""
+    if scheduler.is_running:
+        scheduler.stop()
+        print("[Shutdown] Scheduler stopped")
 
 
 @app.get("/")

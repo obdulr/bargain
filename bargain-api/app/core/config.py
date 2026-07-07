@@ -36,7 +36,12 @@ class Settings(BaseSettings):
     
     # Resend (Email)
     RESEND_API_KEY: str = ""
-    
+    ALERT_FROM_EMAIL: str = "alerts@bargainhuntrs.com"
+
+    # Scheduled Scanning
+    AUTO_SCAN: bool = False
+    SCAN_INTERVAL_MINUTES: int = 60
+
     # Price Monitoring
     USER_AGENT: str = "Mozilla/5.0 (compatible; BargainHuntrs/1.0; +https://bargainhuntrs.com)"
 

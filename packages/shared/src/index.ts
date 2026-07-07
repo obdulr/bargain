@@ -10,12 +10,30 @@ export interface User {
 export interface Alert {
   id: string;
   user_id: string;
-  type: 'price_error' | 'clearance' | 'arbitrage';
+  type: 'arbitrage' | 'glitch' | 'clearance' | 'price_error';
   title: string;
   description: string;
   source_url: string;
   potential_profit: number;
+  status: 'pending' | 'sent' | 'logged' | 'delayed';
+  is_read: boolean;
+  read_at?: string;
+  sent_at?: string;
   created_at: string;
+}
+
+export interface AlertListResponse {
+  alerts: Alert[];
+  unread_count: number;
+}
+
+export interface SchedulerStatus {
+  running: boolean;
+  interval_minutes: number;
+  last_scan_at?: string;
+  next_scan_at?: string;
+  last_scan_status: string;
+  last_error?: string;
 }
 
 export interface PriceSnapshot {

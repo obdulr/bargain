@@ -59,6 +59,8 @@ class Alert(Base):
     potential_profit = Column(Numeric(10, 2))
     status = Column(String(50), default="pending")
     sent_at = Column(DateTime)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="alerts")
