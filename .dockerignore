@@ -1,0 +1,45 @@
+# Dependencies
+node_modules
+bargain-web/node_modules
+packages/*/node_modules
+
+# Build artifacts
+bargain-web/.next
+bargain-web/out
+dist
+build
+
+# Python
+bargain-api/.venv
+bargain-api/venv
+bargain-api/ENV
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+
+# Environment files
+.env
+.env.local
+.env.production
+*.pem
+
+# macOS metadata
+._*
+.DS_Store
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+
+# Logs
+*.log
+
+# Docker
+Dockerfile
+.dockerignore

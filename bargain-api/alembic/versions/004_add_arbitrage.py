@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "004_add_arbitrage"
-down_revision = "003_add_waitlist"
+down_revision = "003"
 branch_labels = None
 depends_on = None
 

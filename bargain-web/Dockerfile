@@ -7,11 +7,11 @@ WORKDIR /app
 # Pin pnpm to v9 to avoid pnpm v11 "approve-builds" prompts in CI.
 RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 
-# Copy workspace manifests first (better caching)
-COPY package.json pnpm-lock.yaml ./
+# Copy package manifest (lockfile lives at monorepo root, not in bargain-web/)
+COPY package.json ./
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies (frozen-lockfile=false because lockfile is at repo root)
+RUN pnpm install --frozen-lockfile=false
 
 # Copy source code
 COPY . .
@@ -29,4 +29,4 @@ ENV NODE_ENV=production
 ENV PORT=3030
 EXPOSE 3030
 
-CMD ["sh", "-c", "node .next/standalone/server.js"]
+CMD ["sh", "-c", "node .next/standalone/bargain-web/server.js"]
