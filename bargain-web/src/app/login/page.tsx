@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/lib/authService";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PasskeyButton from "@/components/PasskeyButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -105,6 +106,32 @@ export default function LoginPage() {
                 {loading ? "Signing in…" : "Sign in"}
               </button>
             </form>
+
+            {/* Passkey divider + button */}
+            <div className="relative mt-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white px-2 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                  or
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <PasskeyButton
+                mode="login"
+                email={email}
+                onError={setError}
+                onSuccess={() => router.push("/dashboard")}
+              />
+              {!email && (
+                <p className="mt-2 text-center text-xs text-zinc-400 dark:text-zinc-600">
+                  Enter your email above to sign in with a passkey.
+                </p>
+              )}
+            </div>
 
             <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
               Don&apos;t have an account?{" "}

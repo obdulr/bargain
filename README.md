@@ -108,22 +108,25 @@ pnpm run format
 - ✅ Email/SMS notifications
 - ✅ Stripe subscription paywall
 - ✅ Landing page + waitlist
+- ✅ JWT authentication (email/password)
+- ✅ WebAuthn / passkey authentication
+- ✅ Billing management page (Stripe checkout + cancel)
 
-### Phase 2 (Month 2)
-- Cross-platform arbitrage scanner (eBay ↔ Amazon)
-- Price comparison engine
+### Phase 2 (Month 2) ❌
+- ❌ Cross-platform arbitrage scanner (eBay ↔ Amazon)
+- ❌ Price comparison engine
 
-### Phase 3 (Month 3)
-- Reseller analytics dashboard
-- ROI tracking per user
+### Phase 3 (Month 3) ❌
+- ❌ Reseller analytics dashboard
+- ❌ ROI tracking per user
 
-### Phase 4 (Month 4)
-- Brick & mortar clearance alerts
-- Zip code based store notifications
+### Phase 4 (Month 4) ❌
+- ❌ Brick & mortar clearance alerts
+- ❌ Zip code based store notifications
 
-### Phase 5 (Months 5-6)
-- International arbitrage layer
-- Tariff/duty calculator
+### Phase 5 (Months 5-6) ❌
+- ❌ International arbitrage layer
+- ❌ Tariff/duty calculator
 
 ## 💰 Subscription Tiers
 

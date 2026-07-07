@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -18,7 +18,13 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     subscription_tier = Column(String(50), default="free")
     stripe_customer_id = Column(String(255))
+    stripe_subscription_id = Column(String(255))
     refresh_token = Column(String(255))
+    # WebAuthn / passkey fields
+    credential_id = Column(String(255))
+    public_key = Column(LargeBinary)
+    sign_count = Column(Integer, default=0)
+    aaguid = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

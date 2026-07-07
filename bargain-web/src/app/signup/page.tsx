@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/lib/authService";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PasskeyButton from "@/components/PasskeyButton";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,7 +22,7 @@ export default function SignupPage() {
     setLoading(true);
     const result = await authService.register({ email, password });
     if (result.success) {
-      router.push("/dashboard");
+      setRegistered(true);
     } else {
       setError(result.error || "Signup failed");
     }
@@ -107,6 +109,60 @@ export default function SignupPage() {
                 {loading ? "Creating account…" : "Create account"}
               </button>
             </form>
+
+            {/* Passkey option — only available after the account is created. */}
+            {registered ? (
+              <div className="mt-6">
+                <div className="relative mb-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                      Secure your account
+                    </span>
+                  </div>
+                </div>
+                <PasskeyButton
+                  mode="register"
+                  label="Add a passkey for faster sign-in"
+                  onError={setError}
+                  onSuccess={() => router.push("/dashboard")}
+                />
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className="mt-3 w-full text-center text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+                >
+                  Skip for now
+                </button>
+              </div>
+            ) : (
+              <div className="mt-6">
+                <div className="relative mb-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                      or
+                    </span>
+                  </div>
+                </div>
+                <PasskeyButton
+                  mode="login"
+                  email={email}
+                  label="Sign in with a passkey"
+                  onError={setError}
+                  onSuccess={() => router.push("/dashboard")}
+                />
+                {!email && (
+                  <p className="mt-2 text-center text-xs text-zinc-400 dark:text-zinc-600">
+                    Already have a passkey? Enter your email to sign in.
+                  </p>
+                )}
+              </div>
+            )}
 
             <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
               Already have an account?{" "}

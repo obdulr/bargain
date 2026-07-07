@@ -12,3 +12,5 @@ resend>=0.8.0
 httpx>=0.27.0
 psycopg2-binary>=2.9.9
 email-validator>=2.1.0
+stripe>=7.9.0
+python-webauthn>=2.0.0

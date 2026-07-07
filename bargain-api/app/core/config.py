@@ -32,7 +32,17 @@ class Settings(BaseSettings):
     
     # Stripe
     STRIPE_API_KEY: str = ""
+    STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_FREE: str = ""
+    STRIPE_PRICE_PRO: str = ""
+    STRIPE_PRICE_ENTERPRISE: str = ""
+    FRONTEND_URL: str = "http://localhost:3030"
+
+    # WebAuthn (passkeys)
+    WEB_AUTHN_RP_ID: str = "localhost"
+    WEB_AUTHN_RP_NAME: str = "BargainHuntrs"
+    WEB_AUTHN_ORIGIN: str = "http://localhost:3030"
     
     # Resend (Email)
     RESEND_API_KEY: str = ""
