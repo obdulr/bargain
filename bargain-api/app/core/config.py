@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     
     # Price Monitoring
     USER_AGENT: str = "Mozilla/5.0 (compatible; BargainHuntrs/1.0; +https://bargainhuntrs.com)"
+
+    # Keepa API (Amazon price history)
+    KEEPA_API_KEY: str = ""
+
+    # eBay API (Browse API for sold listings)
+    EBAY_CLIENT_ID: str = ""
+    EBAY_CLIENT_SECRET: str = ""
     
     # Railway (set automatically)
     PORT: int = 4030

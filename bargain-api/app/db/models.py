@@ -99,3 +99,47 @@ class WaitlistEntry(Base):
     source = Column(String(255))
     message = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ArbitrageDeal(Base):
+    """Detected arbitrage opportunity between buy/sell platforms."""
+    __tablename__ = "arbitrage_deals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    asin = Column(String(20), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    image_url = Column(String(1000))
+    buy_url = Column(String(1000))
+    buy_platform = Column(String(50), default="amazon")
+    buy_price = Column(Numeric(10, 2), nullable=False)
+    sell_platform = Column(String(50), default="ebay")
+    sell_price = Column(Numeric(10, 2), nullable=False)
+    historical_avg = Column(Numeric(10, 2))
+    discrepancy = Column(Numeric(5, 4))  # Percentage as decimal (0.50 = 50%)
+    deal_tier = Column(String(20), default="arbitrage")  # glitch, clearance, arbitrage, watch
+    net_profit = Column(Numeric(10, 2))
+    roi = Column(Numeric(5, 4))  # 0.25 = 25%
+    total_costs = Column(Numeric(10, 2))
+    platform_fee = Column(Numeric(10, 2))
+    bsr = Column(Integer)
+    category = Column(String(100))
+    is_profitable = Column(Boolean, default=False)
+    status = Column(String(50), default="active")  # active, alerted, expired, rejected
+    detected_at = Column(DateTime, default=datetime.utcnow, index=True)
+    alerted_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScanRun(Base):
+    """Track scan runs for monitoring and deduplication."""
+    __tablename__ = "scan_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_type = Column(String(50), default="amazon_ebay")  # amazon_ebay, walmart_ebay, etc.
+    products_scanned = Column(Integer, default=0)
+    deals_found = Column(Integer, default=0)
+    deals_alerted = Column(Integer, default=0)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    status = Column(String(50), default="running")  # running, completed, failed
+    error = Column(String)
