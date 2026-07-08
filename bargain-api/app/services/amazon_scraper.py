@@ -22,6 +22,7 @@ import time
 from app.core.config import settings
 from app.services.scraper import fetch_price, _parse_price
 from app.services.deal_criteria import PriceHistory
+from app.services.affiliate_service import add_affiliate_tag
 
 
 @dataclass
@@ -40,7 +41,7 @@ class AmazonProduct:
 
     def __post_init__(self):
         if not self.url:
-            self.url = f"https://www.amazon.com/dp/{self.asin}"
+            self.url = add_affiliate_tag(f"https://www.amazon.com/dp/{self.asin}", "amazon", self.asin)
 
 
 # Keepa API endpoints
@@ -149,7 +150,7 @@ async def fetch_amazon_product(asin: str) -> Optional[AmazonProduct]:
 
 async def _scrape_amazon_product(asin: str) -> Optional[AmazonProduct]:
     """Fallback: scrape Amazon product page directly (limited data)."""
-    url = f"https://www.amazon.com/dp/{asin}"
+    url = add_affiliate_tag(f"https://www.amazon.com/dp/{asin}", "amazon", asin)
     price, _ = await fetch_price(url)
 
     return AmazonProduct(

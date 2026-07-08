@@ -38,6 +38,7 @@ from app.services.deal_criteria import (
     default_criteria,
 )
 from app.services.coupon_scraper import ScrapedCoupon, calculate_discounted_price
+from app.services.affiliate_service import add_affiliate_tag
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ async def find_arbitrage_for_asin(
         asin=asin,
         title=product.title,
         image_url=product.image_url,
-        buy_url=product.url,
+        buy_url=add_affiliate_tag(product.url, "amazon", asin),
         buy_price=product.current_price,
         sell_price=ebay_market_price,
         historical_avg=product.price_history.average,
@@ -350,7 +351,7 @@ async def scan_amazon_for_arbitrage(
             asin=product.asin,
             title=product.title,
             image_url=product.image_url,
-            buy_url=product.url,
+            buy_url=add_affiliate_tag(product.url, "amazon", product.asin),
             buy_price=product.current_price,
             sell_price=ebay_price,
             historical_avg=product.price_history.average,

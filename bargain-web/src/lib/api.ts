@@ -178,6 +178,61 @@ export async function getDealStats(token: string) {
   return fetchWithAuth("/api/v1/arbitrage/stats", token, { method: "GET" });
 }
 
+// ─── Affiliate Click Tracking ───────────────────────────────────────────────
+
+export async function trackAffiliateClick(
+  token: string,
+  data: { url: string; retailer?: string; asin?: string; deal_id?: string }
+) {
+  return fetchWithAuth("/api/v1/affiliate/click", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<{
+    affiliate_url: string;
+    original_url: string;
+    retailer: string;
+    tracked: boolean;
+  }>;
+}
+
+// ─── Price Prediction ───────────────────────────────────────────────────────
+
+export interface PriceTrend {
+  recommendation: "buy_now" | "wait" | "monitor";
+  confidence: number;
+  predicted_low: number | null;
+  current_vs_predicted: number;
+  trend: "decreasing" | "stable" | "increasing";
+  volatility: number;
+  days_to_lowest: number;
+  message?: string;
+}
+
+export interface DealQuality {
+  score: number;
+  method: string;
+  percentile_rank?: number;
+  z_score?: number;
+  recent_trend_pct?: number;
+}
+
+export interface PricePrediction {
+  deal_id: string;
+  asin: string;
+  current_price: number;
+  trend?: PriceTrend;
+  deal_quality?: DealQuality;
+  recommendation?: string;
+  tier: string;
+  message?: string;
+}
+
+export async function getPricePrediction(token: string, dealId: string) {
+  return fetchWithAuth(`/api/v1/arbitrage/deals/${dealId}/prediction`, token, {
+    method: "GET",
+  }) as Promise<PricePrediction>;
+}
+
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 export interface ChannelStatus {

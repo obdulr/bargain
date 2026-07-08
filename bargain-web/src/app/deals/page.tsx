@@ -8,7 +8,10 @@ import Footer from "@/components/Footer";
 import {
   getDeals,
   getDealStats,
+  trackAffiliateClick,
+  getPricePrediction,
   type ArbitrageDeal,
+  type PricePrediction,
 } from "@/lib/api";
 
 export default function DealsPage() {
@@ -21,6 +24,12 @@ export default function DealsPage() {
   const [minProfit, setMinProfit] = useState<string>("");
   const [loadingDeals, setLoadingDeals] = useState(false);
   const [error, setError] = useState("");
+  const [predictions, setPredictions] = useState<Record<string, PricePrediction>>({});
+  const [loadingPrediction, setLoadingPrediction] = useState<Record<string, boolean>>({});
+  const [clickingDeal, setClickingDeal] = useState<string | null>(null);
+
+  const isPaidTier = (user?.subscriptionTier || "").toLowerCase() === "pro" ||
+    (user?.subscriptionTier || "").toLowerCase() === "enterprise";
 
   useEffect(() => {
     if (!loading && !user) {
@@ -63,6 +72,55 @@ export default function DealsPage() {
     }
   }, [idToken, loadDeals, loadStats]);
 
+  const handleDealClick = useCallback(
+    async (deal: ArbitrageDeal, e: React.MouseEvent) => {
+      e.preventDefault();
+      if (!idToken || !deal.buy_url) return;
+      setClickingDeal(deal.id);
+      try {
+        const result = await trackAffiliateClick(idToken, {
+          url: deal.buy_url,
+          retailer: "amazon",
+          asin: deal.asin,
+          deal_id: deal.id,
+        });
+        window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+      } catch {
+        // Fallback to the original URL if tracking fails
+        window.open(deal.buy_url, "_blank", "noopener,noreferrer");
+      } finally {
+        setClickingDeal(null);
+      }
+    },
+    [idToken]
+  );
+
+  const handleLoadPrediction = useCallback(
+    async (dealId: string) => {
+      if (!idToken || predictions[dealId]) return;
+      setLoadingPrediction((prev) => ({ ...prev, [dealId]: true }));
+      try {
+        const prediction = await getPricePrediction(idToken, dealId);
+        setPredictions((prev) => ({ ...prev, [dealId]: prediction }));
+      } catch (err) {
+        // Non-critical — store a minimal error state so UI doesn't refetch
+        setPredictions((prev) => ({
+          ...prev,
+          [dealId]: {
+            deal_id: dealId,
+            asin: "",
+            current_price: 0,
+            tier: "free",
+            message: err instanceof Error ? err.message : "Prediction unavailable",
+          },
+        }));
+      } finally {
+        setLoadingPrediction((prev) => ({ ...prev, [dealId]: false }));
+      }
+    },
+    [idToken, predictions]
+  );
+
   function formatTier(tier: string): { label: string; color: string } {
     switch (tier) {
       case "glitch":
@@ -76,6 +134,25 @@ export default function DealsPage() {
       default:
         return { label: tier.toUpperCase(), color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" };
     }
+  }
+
+  function formatPrediction(rec: string): { label: string; color: string; arrow: string } {
+    switch (rec) {
+      case "buy_now":
+        return { label: "BUY NOW", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400", arrow: "↓" };
+      case "wait":
+        return { label: "WAIT", color: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400", arrow: "↓" };
+      case "monitor":
+        return { label: "MONITOR", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400", arrow: "→" };
+      default:
+        return { label: rec.toUpperCase(), color: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400", arrow: "→" };
+    }
+  }
+
+  function trendArrow(trend: string): string {
+    if (trend === "decreasing") return "↓";
+    if (trend === "increasing") return "↑";
+    return "→";
   }
 
   return (
@@ -255,18 +332,68 @@ export default function DealsPage() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Price Prediction */}
+                            <div className="mt-3">
+                              {predictions[deal.id] ? (
+                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+                                  {(() => {
+                                    const p = predictions[deal.id];
+                                    const rec = p.trend?.recommendation || p.recommendation || "monitor";
+                                    const badge = formatPrediction(rec);
+                                    return (
+                                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                                        <span className={`inline-block rounded-md px-2 py-0.5 font-medium ${badge.color}`}>
+                                          {badge.arrow} {badge.label}
+                                        </span>
+                                        {p.trend && (
+                                          <>
+                                            <span className="text-zinc-500 dark:text-zinc-400">
+                                              Confidence: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{p.trend.confidence}%</span>
+                                            </span>
+                                            {p.trend.predicted_low !== null && (
+                                              <span className="text-zinc-500 dark:text-zinc-400">
+                                                Predicted low: <span className="font-semibold text-zinc-700 dark:text-zinc-200">${p.trend.predicted_low.toFixed(2)}</span>
+                                              </span>
+                                            )}
+                                            <span className="text-zinc-500 dark:text-zinc-400">
+                                              Trend: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{trendArrow(p.trend.trend)} {p.trend.trend}</span>
+                                            </span>
+                                            {isPaidTier && p.deal_quality && (
+                                              <span className="text-zinc-500 dark:text-zinc-400">
+                                                Quality: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{p.deal_quality.score}/100</span>
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                        {p.message && !p.trend && (
+                                          <span className="text-zinc-500 dark:text-zinc-400">{p.message}</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleLoadPrediction(deal.id)}
+                                  disabled={loadingPrediction[deal.id]}
+                                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                >
+                                  {loadingPrediction[deal.id] ? "Analyzing…" : "✨ Price Prediction"}
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Action */}
                           {deal.buy_url && (
-                            <a
-                              href={deal.buy_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 self-center"
+                            <button
+                              onClick={(e) => handleDealClick(deal, e)}
+                              disabled={clickingDeal === deal.id}
+                              className="flex-shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 self-center"
                             >
-                              View →
-                            </a>
+                              {clickingDeal === deal.id ? "…" : "View →"}
+                            </button>
                           )}
                         </div>
                       </div>

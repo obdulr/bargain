@@ -13,7 +13,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.db.session import get_db
-from app.db.models import User, ArbitrageDeal, ScanRun
+from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot
 from app.routers.auth import get_current_user
 from app.services.arbitrage import (
     find_arbitrage_for_asin,
@@ -187,6 +187,86 @@ async def get_deal(
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
     return _deal_to_response(deal)
+
+
+@router.get("/deals/{deal_id}/prediction")
+async def get_price_prediction(
+    deal_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get ML price prediction for a specific deal. PRO/ENTERPRISE feature.
+
+    Free users receive a basic recommendation only; PRO/ENTERPRISE users
+    get the full detailed analysis (confidence, predicted low, volatility,
+    deal-quality score).
+    """
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    from app.services.price_predictor import price_predictor
+
+    # Build price history from stored PriceSnapshots for this ASIN
+    snapshots = (
+        db.query(PriceSnapshot)
+        .filter(PriceSnapshot.item_id == deal.asin)
+        .order_by(PriceSnapshot.timestamp.asc())
+        .limit(100)
+        .all()
+    )
+
+    price_history = [
+        {"timestamp": s.timestamp.isoformat() if s.timestamp else None, "price": float(s.price)}
+        for s in snapshots
+        if s.price is not None
+    ]
+
+    # If we have no snapshot history, synthesize a minimal history from the
+    # deal's own buy price / historical average so the predictor still works.
+    if len(price_history) < price_predictor.min_data_points:
+        synthetic = []
+        if deal.historical_avg and deal.buy_price:
+            avg = float(deal.historical_avg)
+            cur = float(deal.buy_price)
+            # Interpolate a few points between historical avg and current price
+            steps = price_predictor.min_data_points
+            for i in range(steps):
+                frac = i / (steps - 1)
+                synthetic.append({
+                    "timestamp": None,
+                    "price": round(avg + (cur - avg) * frac, 2),
+                })
+        price_history = synthetic
+
+    current_price = float(deal.buy_price) if deal.buy_price else 0.0
+    historical_avg = float(deal.historical_avg) if deal.historical_avg else 0.0
+
+    trend = price_predictor.predict_price_trend(price_history)
+    quality = price_predictor.score_deal_quality(price_history, current_price, historical_avg)
+
+    tier = (current_user.subscription_tier or "free").lower()
+    is_paid = tier in ("pro", "enterprise")
+
+    if is_paid:
+        return {
+            "deal_id": str(deal.id),
+            "asin": deal.asin,
+            "current_price": current_price,
+            "trend": trend,
+            "deal_quality": quality,
+            "tier": tier,
+        }
+
+    # Free users: basic recommendation only
+    return {
+        "deal_id": str(deal.id),
+        "asin": deal.asin,
+        "current_price": current_price,
+        "recommendation": trend.get("recommendation", "monitor"),
+        "tier": tier,
+        "message": "Upgrade to PRO for full price prediction analysis.",
+    }
 
 
 @router.get("/stats", response_model=dict)

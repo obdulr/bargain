@@ -93,7 +93,15 @@ class Settings(BaseSettings):
     # eBay API (Browse API for sold listings)
     EBAY_CLIENT_ID: str = ""
     EBAY_CLIENT_SECRET: str = ""
-    
+
+    # Affiliate IDs
+    AMAZON_ASSOCIATES_TAG: str = ""  # e.g. "bargainhuntrs-20"
+    EBAY_PARTNER_NETWORK_ID: str = ""  # eBay Partner Network campaign ID
+    WALMART_AFFILIATE_ID: str = ""  # Walmart affiliate ID
+    TARGET_AFFILIATE_ID: str = ""  # Target affiliate ID
+    BESTBUY_AFFILIATE_ID: str = ""  # Best Buy affiliate ID
+    RAKUTEN_AFFILIATE_ID: str = ""  # Rakuten/Legacy affiliate ID
+
     # Railway (set automatically)
     PORT: int = 4030
     RAILWAY_ENVIRONMENT: Optional[str] = None

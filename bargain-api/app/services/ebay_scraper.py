@@ -20,6 +20,7 @@ import base64
 
 from app.core.config import settings
 from app.services.scraper import _parse_price
+from app.services.affiliate_service import add_affiliate_tag
 
 
 @dataclass
@@ -155,7 +156,7 @@ async def search_ebay_sold(
             title=item.get("title", ""),
             price=price,
             currency=price_val.get("currency", "USD"),
-            url=item.get("itemWebUrl", ""),
+            url=add_affiliate_tag(item.get("itemWebUrl", ""), "ebay"),
             condition=item.get("condition", "New"),
             shipping_cost=shipping,
             seller_feedback_pct=feedback_pct,
@@ -249,7 +250,7 @@ async def _scrape_ebay_sold(query: str, limit: int = 20) -> list[eBayListing]:
             title=title,
             price=price,
             currency="USD",
-            url=link,
+            url=add_affiliate_tag(link, "ebay"),
         )
         listings.append(listing)
 

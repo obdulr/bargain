@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary
+from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary, Float, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -196,3 +196,19 @@ class NotificationLog(Base):
     error = Column(String)
     sent_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AffiliateClick(Base):
+    """Tracks outbound clicks on affiliate links for conversion/revenue analytics."""
+    __tablename__ = "affiliate_clicks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    retailer = Column(String(50))  # amazon, ebay, walmart, etc.
+    original_url = Column(Text)
+    affiliate_url = Column(Text)
+    asin = Column(String(20), nullable=True, index=True)
+    clicked_at = Column(DateTime, default=datetime.utcnow, index=True)
+    converted = Column(Boolean, default=False)  # Updated later via affiliate API
+    commission_earned = Column(Float, default=0.0)
