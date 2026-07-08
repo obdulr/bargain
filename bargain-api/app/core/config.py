@@ -102,6 +102,20 @@ class Settings(BaseSettings):
     BESTBUY_AFFILIATE_ID: str = ""  # Best Buy affiliate ID
     RAKUTEN_AFFILIATE_ID: str = ""  # Rakuten/Legacy affiliate ID
 
+    # Niche categories for deal scanning
+    NICHES: List[str] = [
+        "electronics",
+        "tools_home_improvement",
+        "outdoor_garden",
+        "toys_games",
+        "kitchen_dining",
+        "sports_fitness",
+        "beauty_personal_care",
+        "baby_nursery",
+        "pet_supplies",
+        "video_games",
+    ]
+
     # Railway (set automatically)
     PORT: int = 4030
     RAILWAY_ENVIRONMENT: Optional[str] = None

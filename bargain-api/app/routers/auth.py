@@ -10,6 +10,7 @@ from uuid import UUID
 from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import User
+from app.services.niche_service import get_all_niches, get_niche
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -32,6 +33,10 @@ class LoginRequest(BaseModel):
 
 class TokenRequest(BaseModel):
     token: str
+
+
+class UpdateNichePreferences(BaseModel):
+    subscribed_niches: list[str] = []
 
 
 def hash_password(password: str) -> str:
@@ -145,6 +150,7 @@ async def profile(current_user: User = Depends(get_current_user)):
         "lastName": current_user.last_name,
         "role": current_user.role,
         "subscriptionTier": current_user.subscription_tier,
+        "subscribedNiches": current_user.subscribed_niches or [],
     }
 
 
@@ -159,6 +165,58 @@ async def me(current_user: User = Depends(get_current_user)):
         "lastName": current_user.last_name,
         "role": current_user.role,
         "subscriptionTier": current_user.subscription_tier,
+        "subscribedNiches": current_user.subscribed_niches or [],
+    }
+
+
+@router.get("/me/niches")
+async def get_my_niches(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the current user's niche subscriptions and all available niches."""
+    available = [
+        {
+            "key": n.key,
+            "name": n.display_name,
+            "emoji": n.emoji,
+            "description": n.description,
+            "typical_margin": n.typical_margin,
+        }
+        for n in get_all_niches()
+    ]
+    return {
+        "subscribed_niches": current_user.subscribed_niches or [],
+        "available_niches": available,
+    }
+
+
+@router.put("/me/niches")
+async def update_my_niches(
+    body: UpdateNichePreferences,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the current user's niche subscriptions.
+
+    Send an empty list to subscribe to all niches (no filter).
+    Only valid niche keys are accepted; unknown keys are rejected.
+    """
+    valid_keys = {n.key for n in get_all_niches()}
+    invalid = [k for k in body.subscribed_niches if k not in valid_keys]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown niche(s): {', '.join(invalid)}",
+        )
+
+    current_user.subscribed_niches = list(body.subscribed_niches)
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "success": True,
+        "subscribed_niches": current_user.subscribed_niches or [],
     }
 
 

@@ -43,6 +43,7 @@ class DealInfo:
     buy_url: str
     image_url: Optional[str] = None
     category: Optional[str] = None
+    niche: Optional[str] = None
     applied_coupon_code: Optional[str] = None
     coupon_discount: Optional[Decimal] = None
 
@@ -59,6 +60,7 @@ class DealInfo:
             buy_url=opp.buy_url,
             image_url=opp.image_url,
             category=opp.category,
+            niche=opp.niche,
             applied_coupon_code=opp.applied_coupon_code,
             coupon_discount=opp.coupon_discount,
         )
@@ -76,6 +78,7 @@ class DealInfo:
             buy_url=deal.buy_url or f"https://www.amazon.com/dp/{deal.asin}",
             image_url=deal.image_url,
             category=deal.category,
+            niche=getattr(deal, "niche", None),
         )
 
     @property
@@ -319,7 +322,6 @@ async def distribute_deal(
     if sms_recipients and settings.TELNYX_API_KEY:
         for phone in sms_recipients:
             channels[f"sms:{phone}"] = asyncio.create_task(send_sms(deal, phone))
-
     # Wait for all
     results = {}
     for name, task in channels.items():
@@ -358,11 +360,48 @@ async def distribute_deal(
     return results
 
 
-def get_sms_recipients(db: Session) -> list[str]:
+def get_sms_recipients(db: Session, niche: Optional[str] = None) -> list[str]:
     """Get phone numbers of users who should receive SMS alerts.
 
     Only Hustler/Pro/Agency tier users with phone numbers on file.
+
+    Args:
+        niche: Optional niche key. When provided, only users whose
+            `subscribed_niches` includes this niche (or who have no
+            niche subscription = all niches) are returned.
+
+    Note:
+        The User model does not currently store phone numbers, so this
+        returns an empty list until that field is added. The niche
+        filtering logic is implemented here so it activates as soon as
+        phone numbers are stored.
     """
-    # This would query users with phone numbers and paid subscriptions
-    # For now, return empty — phone numbers would be added to the User model
-    return []
+    # Query users and apply niche-subscription filtering in Python.
+    # (Phone numbers would be added to the User model in a future migration.)
+    users = db.query(User).all()
+
+    recipients: list[str] = []
+    for u in users:
+        # Niche subscription filter: a user receives the alert if they have
+        # no niche subscriptions (all niches) OR the deal's niche is in
+        # their subscribed list.
+        if niche:
+            subs = u.subscribed_niches or []
+            if subs and niche not in subs:
+                continue
+        # phone = getattr(u, "phone_number", None)
+        # if phone:
+        #     recipients.append(phone)
+    return recipients
+
+
+def user_subscribed_to_niche(user: User, niche: Optional[str]) -> bool:
+    """Check whether a user should receive alerts for a given niche.
+
+    A user with no niche subscriptions receives all niches. A user with
+    subscriptions only receives niches in their list.
+    """
+    if not niche:
+        return True  # No niche on the deal → send to everyone
+    subs = user.subscribed_niches or []
+    return not subs or niche in subs

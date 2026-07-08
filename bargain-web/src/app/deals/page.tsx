@@ -8,9 +8,11 @@ import Footer from "@/components/Footer";
 import {
   getDeals,
   getDealStats,
+  getNiches,
   trackAffiliateClick,
   getPricePrediction,
   type ArbitrageDeal,
+  type Niche,
   type PricePrediction,
 } from "@/lib/api";
 
@@ -20,6 +22,8 @@ export default function DealsPage() {
 
   const [deals, setDeals] = useState<ArbitrageDeal[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [niches, setNiches] = useState<Niche[]>([]);
+  const [selectedNiche, setSelectedNiche] = useState<string>("");
   const [selectedTier, setSelectedTier] = useState<string>("");
   const [minProfit, setMinProfit] = useState<string>("");
   const [loadingDeals, setLoadingDeals] = useState(false);
@@ -44,6 +48,7 @@ export default function DealsPage() {
     try {
       const data = await getDeals(idToken, {
         tier: selectedTier || undefined,
+        niche: selectedNiche || undefined,
         min_profit: minProfit ? parseFloat(minProfit) : undefined,
         limit: 100,
       });
@@ -53,7 +58,7 @@ export default function DealsPage() {
     } finally {
       setLoadingDeals(false);
     }
-  }, [idToken, selectedTier, minProfit]);
+  }, [idToken, selectedTier, selectedNiche, minProfit]);
 
   const loadStats = useCallback(async () => {
     if (!idToken) return;
@@ -65,12 +70,23 @@ export default function DealsPage() {
     }
   }, [idToken]);
 
+  const loadNiches = useCallback(async () => {
+    if (!idToken) return;
+    try {
+      const data = await getNiches(idToken);
+      setNiches(data);
+    } catch {
+      // Non-critical — niche filter just won't render
+    }
+  }, [idToken]);
+
   useEffect(() => {
     if (idToken) {
       loadDeals();
       loadStats();
+      loadNiches();
     }
-  }, [idToken, loadDeals, loadStats]);
+  }, [idToken, loadDeals, loadStats, loadNiches]);
 
   const handleDealClick = useCallback(
     async (deal: ArbitrageDeal, e: React.MouseEvent) => {
@@ -197,6 +213,40 @@ export default function DealsPage() {
           </div>
         </section>
 
+        {/* Niche filter chips */}
+        {niches.length > 0 && (
+          <section className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/60">
+            <div className="mx-auto max-w-6xl">
+              <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 scrollbar-thin">
+                <button
+                  onClick={() => setSelectedNiche("")}
+                  className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                    selectedNiche === ""
+                      ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  All
+                </button>
+                {niches.map((n) => (
+                  <button
+                    key={n.key}
+                    onClick={() => setSelectedNiche(n.key)}
+                    className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                      selectedNiche === n.key
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    <span className="mr-1">{n.emoji}</span>
+                    {n.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Filters */}
         <section className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/60">
           <div className="mx-auto max-w-6xl flex flex-wrap items-center gap-4">
@@ -220,11 +270,12 @@ export default function DealsPage() {
               className="w-32 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
 
-            {(selectedTier || minProfit) && (
+            {(selectedTier || minProfit || selectedNiche) && (
               <button
                 onClick={() => {
                   setSelectedTier("");
                   setMinProfit("");
+                  setSelectedNiche("");
                 }}
                 className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
               >
@@ -288,6 +339,7 @@ export default function DealsPage() {
                                 </h3>
                                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                                   ASIN: {deal.asin}
+                                  {deal.niche && ` · ${deal.niche.replace(/_/g, " ")}`}
                                   {deal.category && ` · ${deal.category}`}
                                   {deal.bsr && ` · BSR #${deal.bsr.toLocaleString()}`}
                                 </p>

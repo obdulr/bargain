@@ -153,6 +153,7 @@ export interface ArbitrageDeal {
   platform_fee?: number;
   bsr?: number;
   category?: string;
+  niche?: string;
   is_profitable: boolean;
   status: string;
   detected_at: string;
@@ -161,12 +162,21 @@ export interface ArbitrageDeal {
   original_buy_price?: number;
 }
 
+export interface Niche {
+  key: string;
+  name: string;
+  emoji: string;
+  description: string;
+  typical_margin: string;
+}
+
 export async function getDeals(
   token: string,
-  params?: { tier?: string; min_profit?: number; limit?: number; offset?: number }
+  params?: { tier?: string; niche?: string; min_profit?: number; limit?: number; offset?: number }
 ) {
   const qs = new URLSearchParams();
   if (params?.tier) qs.set("tier", params.tier);
+  if (params?.niche) qs.set("niche", params.niche);
   if (params?.min_profit) qs.set("min_profit", String(params.min_profit));
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
@@ -174,8 +184,41 @@ export async function getDeals(
   return fetchWithAuth(`/api/v1/arbitrage/deals${query ? `?${query}` : ""}`, token, { method: "GET" }) as Promise<ArbitrageDeal[]>;
 }
 
+export async function getNiches(token: string) {
+  return fetchWithAuth("/api/v1/arbitrage/niches", token, { method: "GET" }) as Promise<Niche[]>;
+}
+
+export async function scanNiche(token: string, niche: string, maxProducts = 20) {
+  const qs = new URLSearchParams({ max_products: String(maxProducts) });
+  return fetchWithAuth(`/api/v1/arbitrage/scan/${niche}?${qs.toString()}`, token, {
+    method: "POST",
+  }) as Promise<{
+    scan_id: string;
+    niche: string;
+    products_scanned: number;
+    deals_found: number;
+    deals: ArbitrageDeal[];
+  }>;
+}
+
 export async function getDealStats(token: string) {
   return fetchWithAuth("/api/v1/arbitrage/stats", token, { method: "GET" });
+}
+
+// ─── Niche Preferences ──────────────────────────────────────────────────────
+
+export async function getMyNiches(token: string) {
+  return fetchWithAuth("/api/v1/auth/me/niches", token, { method: "GET" }) as Promise<{
+    subscribed_niches: string[];
+    available_niches: Niche[];
+  }>;
+}
+
+export async function updateMyNiches(token: string, subscribed_niches: string[]) {
+  return fetchWithAuth("/api/v1/auth/me/niches", token, {
+    method: "PUT",
+    body: JSON.stringify({ subscribed_niches }),
+  }) as Promise<{ success: boolean; subscribed_niches: string[] }>;
 }
 
 // ─── Affiliate Click Tracking ───────────────────────────────────────────────

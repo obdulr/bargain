@@ -163,6 +163,7 @@ async def _scrape_amazon_product(asin: str) -> Optional[AmazonProduct]:
 
 async def search_amazon_deals(
     category: str = "",
+    category_id: int = 0,
     min_discount: Decimal = Decimal("0.50"),
     max_price: Decimal = Decimal("500.00"),
     limit: int = 50,
@@ -173,7 +174,9 @@ async def search_amazon_deals(
     with significant price drops.
 
     Args:
-        category: Amazon category to search (empty = all)
+        category: Amazon category name to search (empty = all)
+        category_id: Keepa/Amazon category ID to filter by (0 = all).
+            Takes precedence over `category` when both are set.
         min_discount: Minimum discount percentage (0.50 = 50% off)
         max_price: Maximum current price
         limit: Maximum number of results
@@ -201,7 +204,10 @@ async def search_amazon_deals(
         },
     }
 
-    if category:
+    # Numeric category ID takes precedence (used by niche scanning)
+    if category_id:
+        params["selection"]["categoryIds"] = [category_id]
+    elif category:
         params["selection"]["category"] = category
 
     async with httpx.AsyncClient(timeout=60.0) as client:

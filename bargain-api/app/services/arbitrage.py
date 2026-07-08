@@ -74,6 +74,7 @@ class ArbitrageOpportunity:
     # Metadata
     bsr: Optional[int] = None
     category: Optional[str] = None
+    niche: Optional[str] = None  # electronics, tools_home_improvement, etc.
     detected_at: datetime = None
 
     def __post_init__(self):
@@ -107,6 +108,7 @@ class ArbitrageOpportunity:
             "platform_fee": float(self.profit.platform_fee) if self.profit else None,
             "bsr": self.bsr,
             "category": self.category,
+            "niche": self.niche,
             "is_profitable": self.is_profitable,
             "detected_at": self.detected_at.isoformat(),
             "applied_coupon_code": self.applied_coupon_code,
@@ -287,10 +289,12 @@ async def find_arbitrage_for_asin(
 
 async def scan_amazon_for_arbitrage(
     category: str = "",
+    category_id: int = 0,
     min_discount: Decimal = Decimal("0.50"),
     max_price: Decimal = Decimal("500.00"),
     limit: int = 20,
     sell_platform: Platform = Platform.EBAY,
+    niche: Optional[str] = None,
 ) -> list[ArbitrageOpportunity]:
     """Scan Amazon for deals and check each for arbitrage potential.
 
@@ -301,11 +305,16 @@ async def scan_amazon_for_arbitrage(
     4. Returns only profitable opportunities
 
     Args:
-        category: Amazon category to search (empty = all)
+        category: Amazon category name to search (empty = all)
+        category_id: Keepa/Amazon category ID to filter by (0 = all).
+            Used by niche scanning to target a specific category.
         min_discount: Minimum discount percentage on Amazon
         max_price: Maximum Amazon price
         limit: Max products to scan
         sell_platform: Where items will be sold
+        niche: Optional niche key to tag each resulting opportunity with
+            (e.g. "electronics"). When set, every returned opportunity
+            has its `niche` field populated.
 
     Returns:
         List of profitable ArbitrageOpportunity objects
@@ -315,6 +324,7 @@ async def scan_amazon_for_arbitrage(
     # Get Amazon deals
     products = await search_amazon_deals(
         category=category,
+        category_id=category_id,
         min_discount=min_discount,
         max_price=max_price,
         limit=limit,
@@ -358,6 +368,7 @@ async def scan_amazon_for_arbitrage(
             profit=profit,
             bsr=product.bsr,
             category=product.category,
+            niche=niche,
         )
 
         if opportunity.is_profitable:
@@ -372,3 +383,40 @@ async def scan_amazon_for_arbitrage(
 
     logger.info(f"Found {len(opportunities)} profitable arbitrage opportunities")
     return opportunities
+
+
+async def scan_niche(niche_key: str, max_products: int = 20) -> list[ArbitrageOpportunity]:
+    """Scan for arbitrage deals in a specific niche category.
+
+    Uses the niche's Amazon (Keepa) category ID to limit the Keepa deal
+    finder to that category, then tags every resulting opportunity with
+    the niche key so it can be filtered/subscribed to downstream.
+
+    Args:
+        niche_key: Niche key (e.g. "electronics"). Must exist in niche_service.
+        max_products: Maximum number of Amazon deals to scan.
+
+    Returns:
+        List of profitable ArbitrageOpportunity objects tagged with the niche.
+    """
+    from app.services.niche_service import get_niche
+
+    niche = get_niche(niche_key)
+    if not niche:
+        raise ValueError(f"Unknown niche: {niche_key}")
+
+    logger.info(f"Scanning niche '{niche_key}' (Amazon category {niche.amazon_category_id})...")
+
+    deals = await scan_amazon_for_arbitrage(
+        category_id=niche.amazon_category_id,
+        limit=max_products,
+        niche=niche_key,
+    )
+
+    # Ensure every deal is tagged (defensive — scan_amazon_for_arbitrage
+    # already sets it, but this guards against any path that drops it)
+    for deal in deals:
+        deal.niche = niche_key
+
+    logger.info(f"Niche '{niche_key}': found {len(deals)} profitable deals")
+    return deals

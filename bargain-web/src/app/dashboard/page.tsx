@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { authService } from "@/lib/authService";
-import { getCurrentUser, getWatchlist, addWatchlistItem, refreshWatchlistItem, deleteWatchlistItem } from "@/lib/api";
+import {
+  getCurrentUser,
+  getWatchlist,
+  addWatchlistItem,
+  refreshWatchlistItem,
+  deleteWatchlistItem,
+  getMyNiches,
+  updateMyNiches,
+  type Niche,
+} from "@/lib/api";
 
 interface UserData {
   id: string;
@@ -30,6 +39,9 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", url: "", target: "" });
   const [adding, setAdding] = useState(false);
+  const [availableNiches, setAvailableNiches] = useState<Niche[]>([]);
+  const [subscribedNiches, setSubscribedNiches] = useState<string[]>([]);
+  const [savingNiches, setSavingNiches] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -40,6 +52,7 @@ export default function DashboardPage() {
     if (idToken) {
       getCurrentUser(idToken).then(setUserData).catch((err) => setError(err.message));
       loadItems();
+      loadNiches();
     }
   }, [user, loading, idToken, router]);
 
@@ -50,6 +63,35 @@ export default function DashboardPage() {
       setItems(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load watchlist");
+    }
+  }
+
+  async function loadNiches() {
+    if (!idToken) return;
+    try {
+      const data = await getMyNiches(idToken);
+      setAvailableNiches(data.available_niches);
+      setSubscribedNiches(data.subscribed_niches);
+    } catch {
+      // Non-critical
+    }
+  }
+
+  function toggleNiche(key: string) {
+    setSubscribedNiches((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  async function saveNiches() {
+    if (!idToken) return;
+    setSavingNiches(true);
+    try {
+      await updateMyNiches(idToken, subscribedNiches);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save niche preferences");
+    } finally {
+      setSavingNiches(false);
     }
   }
 
@@ -166,6 +208,46 @@ export default function DashboardPage() {
               Live →
             </p>
           </Link>
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Your Niches</h2>
+            <button
+              onClick={saveNiches}
+              disabled={savingNiches}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {savingNiches ? "Saving..." : "Save preferences"}
+            </button>
+          </div>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Pick the categories you want deal alerts for. Leave all unchecked to receive every niche.
+          </p>
+          {availableNiches.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">Loading niches...</p>
+          ) : (
+            <div className="mt-5 flex flex-wrap gap-2">
+              {availableNiches.map((n) => {
+                const selected = subscribedNiches.includes(n.key);
+                return (
+                  <button
+                    key={n.key}
+                    onClick={() => toggleNiche(n.key)}
+                    title={n.description}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      selected
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    <span className="mr-1">{n.emoji}</span>
+                    {n.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="mt-12 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">

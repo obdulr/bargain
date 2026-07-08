@@ -23,7 +23,7 @@ from app.db.models import ScanRun, User, ArbitrageDeal
 from app.services.arbitrage import scan_amazon_for_arbitrage, find_arbitrage_for_asin, ArbitrageOpportunity
 from app.services.profit_calculator import Platform
 from app.services.alert_service import create_alert_for_opportunity
-from app.services.notification_service import distribute_deal, DealInfo, get_sms_recipients
+from app.services.notification_service import distribute_deal, DealInfo, get_sms_recipients, user_subscribed_to_niche
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,6 @@ class ScanScheduler:
             # Save profitable deals and create alerts for all active users
             deals_alerted = 0
             users = db.query(User).filter(User.is_active == True).all()
-            sms_recipients = get_sms_recipients(db)
 
             for opp in opportunities:
                 if not opp.is_profitable:
@@ -159,13 +158,19 @@ class ScanScheduler:
 
                 # Distribute to all notification channels (Discord, Telegram, Twitter, Facebook, SMS)
                 deal_info = DealInfo.from_opportunity(opp)
+                # SMS recipients are filtered by niche subscription: a user with
+                # no subscriptions receives all niches; otherwise only their picks.
+                sms_recipients = get_sms_recipients(db, niche=opp.niche)
                 try:
                     await distribute_deal(deal_info, db, sms_recipients=sms_recipients)
                 except Exception as e:
                     logger.error(f"Notification distribution failed for {opp.asin}: {e}")
 
-                # Create email alerts for each active user
+                # Create email alerts only for users subscribed to this niche
+                # (users with no niche subscription receive all niches)
                 for user in users:
+                    if not user_subscribed_to_niche(user, opp.niche):
+                        continue
                     alert = create_alert_for_opportunity(db, user, opp)
                     if alert:
                         deals_alerted += 1

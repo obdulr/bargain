@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary, Float, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 import uuid
@@ -25,6 +25,9 @@ class User(Base):
     public_key = Column(LargeBinary)
     sign_count = Column(Integer, default=0)
     aaguid = Column(String(255))
+    # Niche subscriptions — users pick which categories they want alerts for.
+    # Empty/None means "all niches".
+    subscribed_niches = Column(ARRAY(String), default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -131,6 +134,7 @@ class ArbitrageDeal(Base):
     platform_fee = Column(Numeric(10, 2))
     bsr = Column(Integer)
     category = Column(String(100))
+    niche = Column(String(50), nullable=True, index=True)  # electronics, tools, etc.
     is_profitable = Column(Boolean, default=False)
     status = Column(String(50), default="active")  # active, alerted, expired, rejected
     detected_at = Column(DateTime, default=datetime.utcnow, index=True)

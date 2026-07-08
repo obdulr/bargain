@@ -18,9 +18,11 @@ from app.routers.auth import get_current_user
 from app.services.arbitrage import (
     find_arbitrage_for_asin,
     scan_amazon_for_arbitrage,
+    scan_niche,
     ArbitrageOpportunity,
 )
 from app.services.profit_calculator import Platform
+from app.services.niche_service import get_niche, get_all_niches
 
 router = APIRouter(prefix="/api/v1/arbitrage", tags=["arbitrage"])
 
@@ -51,9 +53,84 @@ class DealResponse(BaseModel):
     platform_fee: Optional[float] = None
     bsr: Optional[int] = None
     category: Optional[str] = None
+    niche: Optional[str] = None
     is_profitable: bool
     status: str
     detected_at: str
+
+
+@router.get("/niches", response_model=List[dict])
+async def list_niches(
+    current_user: User = Depends(get_current_user),
+):
+    """List all available niche categories for deal scanning/filtering."""
+    return [
+        {
+            "key": n.key,
+            "name": n.display_name,
+            "emoji": n.emoji,
+            "description": n.description,
+            "typical_margin": n.typical_margin,
+        }
+        for n in get_all_niches()
+    ]
+
+
+@router.post("/scan/{niche}", response_model=dict)
+async def scan_niche_endpoint(
+    niche: str,
+    max_products: int = Query(20, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Scan for arbitrage deals in a specific niche category.
+
+    Uses the niche's Amazon (Keepa) category ID to limit the scan, then
+    tags and saves every profitable deal with the niche key.
+    """
+    if not get_niche(niche):
+        raise HTTPException(status_code=404, detail=f"Unknown niche: {niche}")
+
+    scan_run = ScanRun(
+        scan_type=f"niche_{niche}",
+        status="running",
+    )
+    db.add(scan_run)
+    db.commit()
+    db.refresh(scan_run)
+
+    try:
+        opportunities = await scan_niche(niche, max_products=max_products)
+
+        scan_run.products_scanned = max_products
+        scan_run.deals_found = len(opportunities)
+        scan_run.completed_at = datetime.utcnow()
+        scan_run.status = "completed"
+
+        saved_deals = []
+        for opp in opportunities:
+            if opp.is_profitable:
+                deal = _save_opportunity(db, opp)
+                saved_deals.append(opp.to_dict())
+
+        db.commit()
+
+        return {
+            "scan_id": str(scan_run.id),
+            "niche": niche,
+            "products_scanned": max_products,
+            "deals_found": len(opportunities),
+            "deals": saved_deals,
+        }
+    except Exception as e:
+        scan_run.status = "failed"
+        scan_run.error = str(e)
+        scan_run.completed_at = datetime.utcnow()
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Scan failed: {str(e)}",
+        )
 
 
 @router.post("/scan", response_model=dict)
@@ -155,17 +232,21 @@ async def scan_for_deals(
 @router.get("/deals", response_model=List[DealResponse])
 async def list_deals(
     tier: Optional[str] = Query(None, description="Filter by deal tier (glitch, clearance, arbitrage)"),
+    niche: Optional[str] = Query(None, description="Filter by niche (electronics, tools_home_improvement, etc.)"),
     min_profit: Optional[float] = Query(None, description="Minimum net profit"),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List arbitrage deals, optionally filtered by tier and minimum profit."""
+    """List arbitrage deals, optionally filtered by tier, niche, and minimum profit."""
     query = db.query(ArbitrageDeal).filter(ArbitrageDeal.is_profitable == True)
 
     if tier:
         query = query.filter(ArbitrageDeal.deal_tier == tier)
+
+    if niche:
+        query = query.filter(ArbitrageDeal.niche == niche)
 
     if min_profit is not None:
         query = query.filter(ArbitrageDeal.net_profit >= Decimal(str(min_profit)))
@@ -332,6 +413,8 @@ def _save_opportunity(db: Session, opp: ArbitrageOpportunity) -> ArbitrageDeal:
         existing.total_costs = opp.profit.total_costs if opp.profit else None
         existing.platform_fee = opp.profit.platform_fee if opp.profit else None
         existing.detected_at = datetime.utcnow()
+        if opp.niche:
+            existing.niche = opp.niche
         db.commit()
         db.refresh(existing)
         return existing
@@ -354,6 +437,7 @@ def _save_opportunity(db: Session, opp: ArbitrageOpportunity) -> ArbitrageDeal:
         platform_fee=opp.profit.platform_fee if opp.profit else None,
         bsr=opp.bsr,
         category=opp.category,
+        niche=opp.niche,
         is_profitable=opp.is_profitable,
         status="active",
     )
@@ -382,6 +466,7 @@ def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
         platform_fee=float(deal.platform_fee) if deal.platform_fee else None,
         bsr=deal.bsr,
         category=deal.category,
+        niche=deal.niche,
         is_profitable=deal.is_profitable,
         status=deal.status,
         detected_at=deal.detected_at.isoformat() if deal.detected_at else "",
