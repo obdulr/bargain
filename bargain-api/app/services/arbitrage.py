@@ -299,14 +299,14 @@ async def scan_amazon_for_arbitrage(
     """Scan Amazon for deals and check each for arbitrage potential.
 
     This is the main scanning function that:
-    1. Searches Amazon for discounted products (via Keepa)
+    1. Searches Amazon for discounted products (via scraper or Keepa if configured)
     2. For each deal, checks eBay sold prices
     3. Calculates profit
     4. Returns only profitable opportunities
 
     Args:
         category: Amazon category name to search (empty = all)
-        category_id: Keepa/Amazon category ID to filter by (0 = all).
+        category_id: Amazon category ID to filter by (0 = all).
             Used by niche scanning to target a specific category.
         min_discount: Minimum discount percentage on Amazon
         max_price: Maximum Amazon price
@@ -388,7 +388,7 @@ async def scan_amazon_for_arbitrage(
 async def scan_niche(niche_key: str, max_products: int = 20) -> list[ArbitrageOpportunity]:
     """Scan for arbitrage deals in a specific niche category.
 
-    Uses the niche's Amazon (Keepa) category ID to limit the Keepa deal
+    Uses the niche's Amazon category ID to limit the deal
     finder to that category, then tags every resulting opportunity with
     the niche key so it can be filtered/subscribed to downstream.
 

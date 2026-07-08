@@ -1,20 +1,30 @@
 from bs4 import BeautifulSoup
 from decimal import Decimal, InvalidOperation
-import httpx
 from app.core.config import settings
+from app.services.http_client import ScrapingClient
 
 
 async def fetch_price(url: str) -> tuple[Decimal | None, str | None]:
-    """Fetch a product page and try to extract the current price."""
-    headers = {"User-Agent": settings.USER_AGENT}
-    async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-        except Exception:
-            return None, None
+    """Fetch a product page and try to extract the current price.
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    Uses the anti-detection ScrapingClient with rotating user agents,
+    rate limiting, and retry logic instead of a plain httpx client.
+    """
+    proxy = getattr(settings, "SCRAPER_PROXY_URL", "") or None
+    rate_limit = getattr(settings, "SCRAPER_RATE_LIMIT_SECONDS", 2.0)
+    max_retries = getattr(settings, "SCRAPER_MAX_RETRIES", 3)
+
+    async with ScrapingClient(
+        max_retries=max_retries,
+        rate_limit_seconds=rate_limit,
+        proxy_url=proxy,
+    ) as client:
+        html = await client.get_html(url)
+
+    if not html:
+        return None, None
+
+    soup = BeautifulSoup(html, "lxml")
 
     # Try common price meta tags and selectors
     selectors = [

@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     # Price Monitoring
     USER_AGENT: str = "Mozilla/5.0 (compatible; BargainHuntrs/1.0; +https://bargainhuntrs.com)"
 
+    # Scraper settings
+    SCRAPER_RATE_LIMIT_SECONDS: float = 2.0  # Delay between requests to same domain
+    SCRAPER_MAX_RETRIES: int = 3
+    SCRAPER_PROXY_URL: str = ""  # Optional proxy for scraping (http://user:pass@host:port)
+
     # Keepa API (Amazon price history)
     KEEPA_API_KEY: str = ""
 
