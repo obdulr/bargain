@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { authService } from "@/lib/authService";
 import { getCurrentUser, getWatchlist, addWatchlistItem, refreshWatchlistItem, deleteWatchlistItem } from "@/lib/api";
@@ -132,7 +133,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-6 sm:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-3 lg:grid-cols-5">
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Plan</h2>
             <p className="mt-2 text-2xl font-semibold capitalize text-zinc-900 dark:text-zinc-50">
@@ -147,6 +148,24 @@ export default function DashboardPage() {
             <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Alerts</h2>
             <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">0 new</p>
           </div>
+          <Link
+            href="/coupons"
+            className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:hover:bg-emerald-900/40"
+          >
+            <h2 className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Coupon Codes</h2>
+            <p className="mt-2 text-2xl font-semibold text-emerald-900 dark:text-emerald-300">
+              Browse →
+            </p>
+          </Link>
+          <Link
+            href="/deals"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-6 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:hover:bg-amber-900/40"
+          >
+            <h2 className="text-sm font-medium text-amber-700 dark:text-amber-400">Deal Feed</h2>
+            <p className="mt-2 text-2xl font-semibold text-amber-900 dark:text-amber-300">
+              Live →
+            </p>
+          </Link>
         </div>
 
         <div className="mt-12 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">

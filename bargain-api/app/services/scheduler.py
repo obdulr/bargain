@@ -23,6 +23,7 @@ from app.db.models import ScanRun, User, ArbitrageDeal
 from app.services.arbitrage import scan_amazon_for_arbitrage, find_arbitrage_for_asin, ArbitrageOpportunity
 from app.services.profit_calculator import Platform
 from app.services.alert_service import create_alert_for_opportunity
+from app.services.notification_service import distribute_deal, DealInfo, get_sms_recipients
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,7 @@ class ScanScheduler:
             # Save profitable deals and create alerts for all active users
             deals_alerted = 0
             users = db.query(User).filter(User.is_active == True).all()
+            sms_recipients = get_sms_recipients(db)
 
             for opp in opportunities:
                 if not opp.is_profitable:
@@ -155,7 +157,14 @@ class ScanScheduler:
                 deal = _save_opportunity(db, opp)
                 db.commit()
 
-                # Create alerts for each active user
+                # Distribute to all notification channels (Discord, Telegram, Twitter, Facebook, SMS)
+                deal_info = DealInfo.from_opportunity(opp)
+                try:
+                    await distribute_deal(deal_info, db, sms_recipients=sms_recipients)
+                except Exception as e:
+                    logger.error(f"Notification distribution failed for {opp.asin}: {e}")
+
+                # Create email alerts for each active user
                 for user in users:
                     alert = create_alert_for_opportunity(db, user, opp)
                     if alert:

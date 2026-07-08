@@ -151,3 +151,48 @@ class ScanRun(Base):
     completed_at = Column(DateTime)
     status = Column(String(50), default="running")  # running, completed, failed
     error = Column(String)
+
+
+class CouponCode(Base):
+    """Scraped coupon / promo code for a retailer."""
+    __tablename__ = "coupon_codes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code = Column(String(100), nullable=False, index=True)
+    retailer = Column(String(100), nullable=False, index=True)  # amazon, walmart, target, etc.
+    title = Column(String(500), nullable=False)
+    description = Column(String)
+    discount_type = Column(String(20), default="percentage")  # percentage, fixed, free_shipping
+    discount_value = Column(Numeric(10, 2), default=0)  # percentage (e.g. 20 = 20%) or dollar amount
+    min_purchase = Column(Numeric(10, 2))  # minimum order amount required
+    max_discount = Column(Numeric(10, 2))  # cap on discount for percentage codes
+    category = Column(String(100))  # electronics, home, etc. (nullable = any)
+    product_url = Column(String(1000))  # specific product URL if applicable
+    source = Column(String(100), default="scraped")  # scraped, manual, api
+    source_url = Column(String(1000))  # where we scraped it from
+    expires_at = Column(DateTime, index=True)
+    verified = Column(Boolean, default=False)
+    verified_at = Column(DateTime)
+    times_used = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    fail_count = Column(Integer, default=0)
+    status = Column(String(20), default="active")  # active, expired, used_up, unverified
+    scraped_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NotificationLog(Base):
+    """Track deal notifications sent to each channel."""
+    __tablename__ = "notification_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
+    asin = Column(String(20), index=True)
+    channel = Column(String(50), nullable=False)  # discord, telegram, twitter, facebook, sms, email, dashboard
+    recipient = Column(String(255))  # phone number, chat id, handle, email
+    message = Column(String)
+    status = Column(String(20), default="pending")  # pending, sent, failed
+    error = Column(String)
+    sent_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)

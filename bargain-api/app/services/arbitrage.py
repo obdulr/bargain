@@ -37,6 +37,7 @@ from app.services.deal_criteria import (
     PriceHistory,
     default_criteria,
 )
+from app.services.coupon_scraper import ScrapedCoupon, calculate_discounted_price
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,11 @@ class ArbitrageOpportunity:
 
     # Profit
     profit: Optional[ProfitBreakdown] = None
+
+    # Coupon / promo code applied to buy price
+    applied_coupon_code: Optional[str] = None
+    coupon_discount: Optional[Decimal] = None
+    original_buy_price: Optional[Decimal] = None  # price before coupon
 
     # Metadata
     bsr: Optional[int] = None
@@ -102,6 +108,9 @@ class ArbitrageOpportunity:
             "category": self.category,
             "is_profitable": self.is_profitable,
             "detected_at": self.detected_at.isoformat(),
+            "applied_coupon_code": self.applied_coupon_code,
+            "coupon_discount": float(self.coupon_discount) if self.coupon_discount else None,
+            "original_buy_price": float(self.original_buy_price) if self.original_buy_price else None,
         }
 
 
@@ -138,6 +147,53 @@ def _map_category(amazon_category: str) -> ProductCategory:
             return category
 
     return ProductCategory.GENERIC
+
+
+def apply_coupon_to_opportunity(
+    opportunity: ArbitrageOpportunity,
+    coupon: ScrapedCoupon,
+) -> ArbitrageOpportunity:
+    """Apply a coupon to an existing arbitrage opportunity, recalculating profit.
+
+    The coupon reduces the effective buy price, which increases net profit and ROI.
+    Returns a new ArbitrageOpportunity with updated values.
+    """
+    effective_price, discount = calculate_discounted_price(opportunity.buy_price, coupon)
+
+    if discount <= 0:
+        return opportunity
+
+    # Recalculate profit with the discounted buy price
+    sell_platform = Platform.EBAY  # Default; could be parameterized
+    category = _map_category(opportunity.category or "")
+
+    new_profit = calculate_profit(
+        buy_price=effective_price,
+        sell_price=opportunity.sell_price,
+        sell_platform=sell_platform,
+        category=category,
+    )
+
+    # Create updated opportunity
+    return ArbitrageOpportunity(
+        asin=opportunity.asin,
+        title=opportunity.title,
+        image_url=opportunity.image_url,
+        buy_url=opportunity.buy_url,
+        buy_price=effective_price,
+        sell_price=opportunity.sell_price,
+        historical_avg=opportunity.historical_avg,
+        discrepancy=opportunity.discrepancy,
+        deal_tier=opportunity.deal_tier,
+        deal_status=opportunity.deal_status,
+        profit=new_profit,
+        applied_coupon_code=coupon.code,
+        coupon_discount=discount,
+        original_buy_price=opportunity.buy_price,
+        bsr=opportunity.bsr,
+        category=opportunity.category,
+        detected_at=opportunity.detected_at,
+    )
 
 
 async def find_arbitrage_for_asin(

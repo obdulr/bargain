@@ -33,36 +33,36 @@ const comparisonRows = [
 
 const faqs = [
   {
-    q: "Can I cancel or change my plan at any time?",
-    a: "Yes, always. Upgrades take effect immediately and are prorated. Downgrades take effect at the end of your current billing period. No lock-in, no penalties.",
+    q: "Can I cancel or change my plan?",
+    a: "Anytime. Upgrades are immediate and prorated; downgrades apply at period end. No lock-in.",
   },
   {
-    q: "Is there a free trial for paid plans?",
-    a: "The Free plan is yours forever and is a great way to evaluate the platform. Paid plans come with a 7-day money-back guarantee on your first month — if you're not happy, we'll refund you, no questions asked.",
+    q: "Is there a free trial?",
+    a: "The Free plan is forever. Paid plans have a 7-day money-back guarantee on your first month.",
   },
   {
     q: "What retailers do you track?",
-    a: "Currently 500+ including Amazon, Walmart, Target, Best Buy, Home Depot, Costco, Newegg, Sam's Club, eBay, and more. We add new retailers every month — paid users can request additions.",
+    a: "500+ including Amazon, Walmart, Target, Best Buy, Home Depot, Costco, Newegg, eBay, and more. New retailers added monthly.",
   },
   {
-    q: "How is BargainHuntrs different from Tactical Arbitrage or BuyBotPro?",
-    a: "Tactical Arbitrage only works for Amazon FBA and starts at $59/mo. BuyBotPro analyzes deals you already found — it doesn't find them for you. We do both, across any platform, starting free. We also detect price glitches (pricing errors) which no major competitor currently does.",
+    q: "How are you different from Tactical Arbitrage?",
+    a: "TA only does Amazon FBA at $59/mo. We work across any platform, start free, and detect price glitches no competitor offers.",
   },
   {
-    q: "What's the difference between 'Arbitrage alerts' and 'Glitch detection'?",
-    a: "Arbitrage alerts fire when a product's buy price on one platform is significantly below its sell price on another (e.g., Walmart $12 → eBay $40). Glitch detection catches retailer pricing errors — items priced far below their actual value, usually due to a system mistake that gets corrected within hours.",
+    q: "Arbitrage alerts vs. glitch detection?",
+    a: "Arbitrage = buy low on one platform, sell high on another. Glitch = retailer pricing errors corrected within hours.",
   },
   {
-    q: "How quickly will I get alerted to a deal?",
-    a: "Free: daily digest. Hustler: within the hour. Pro: within 5 minutes. Agency: within 1 minute. For glitch detection specifically, all paid plans receive push/SMS immediately when a glitch is detected — glitches can disappear in under 10 minutes so speed is everything.",
+    q: "How fast are alerts?",
+    a: "Free: daily. Hustler: hourly. Pro: 5 min. Agency: 1 min. Glitch alerts push immediately on all paid plans.",
   },
   {
     q: "Is the profit calculator accurate?",
-    a: "We factor in marketplace fees (Amazon, eBay, etc.), estimated shipping, sales tax by state, and return rate risk. It's as accurate as we can make it without knowing your exact carrier rates — you can customize your shipping costs in Settings.",
+    a: "Factors in marketplace fees, shipping, sales tax, and return risk. Customize your carrier costs in Settings.",
   },
   {
-    q: "Do you offer annual billing?",
-    a: "Annual billing is coming soon with a 20% discount. Join the waitlist on the Contact page to be notified when it launches.",
+    q: "Annual billing?",
+    a: "Coming soon with 20% off. Join the waitlist to be notified.",
   },
 ];
 
@@ -188,16 +188,16 @@ export default function PricingPage() {
         </section>
 
         {/* ── FAQ ──────────────────────────────────────────────────────── */}
-        <section className="border-t border-zinc-200 px-6 py-24 dark:border-zinc-800">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 text-center mb-12">
+        <section className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 text-center mb-8">
               Frequently asked questions
             </h2>
-            <dl className="space-y-8">
+            <dl className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
               {faqs.map((faq) => (
-                <div key={faq.q} className="border-b border-zinc-100 dark:border-zinc-800 pb-8 last:border-0">
+                <div key={faq.q}>
                   <dt className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">{faq.q}</dt>
-                  <dd className="mt-2 text-sm text-zinc-600 leading-relaxed dark:text-zinc-400">
+                  <dd className="mt-1 text-sm text-zinc-600 leading-snug dark:text-zinc-400">
                     {faq.a}
                   </dd>
                 </div>

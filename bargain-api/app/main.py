@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, webauthn
+from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, webauthn, coupons, notifications
 from app.routers.alerts import router as alerts_router, scheduler_router
 from app.services.scheduler import scheduler
 from app.core.config import settings
@@ -37,6 +37,8 @@ app.include_router(watchlist.router)
 app.include_router(waitlist.router)
 app.include_router(arbitrage.router)
 app.include_router(subscriptions.router)
+app.include_router(coupons.router)
+app.include_router(notifications.router)
 app.include_router(alerts_router)
 app.include_router(scheduler_router)
 

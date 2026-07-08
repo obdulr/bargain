@@ -52,6 +52,38 @@ class Settings(BaseSettings):
     AUTO_SCAN: bool = False
     SCAN_INTERVAL_MINUTES: int = 60
 
+    # Coupon Scraping
+    COUPON_AUTO_SCRAPE: bool = False
+    COUPON_SCRAPE_INTERVAL_HOURS: int = 6
+
+    # ─── Notification Channels ────────────────────────────────────────────
+
+    # Discord
+    DISCORD_WEBHOOK_URL: str = ""
+
+    # Telegram
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHANNEL_ID: str = ""  # e.g. @bargainhuntrs_deals or -1001234567890
+
+    # X.com (Twitter)
+    TWITTER_API_KEY: str = ""
+    TWITTER_API_SECRET: str = ""
+    TWITTER_ACCESS_TOKEN: str = ""
+    TWITTER_ACCESS_TOKEN_SECRET: str = ""
+
+    # Facebook
+    FACEBOOK_PAGE_ACCESS_TOKEN: str = ""
+    FACEBOOK_PAGE_ID: str = ""
+
+    # SMS (Telnyx)
+    TELNYX_API_KEY: str = ""
+    TELNYX_FROM_NUMBER: str = ""  # e.g. +1234567890
+    TELNYX_MESSAGING_PROFILE_ID: str = ""  # Telnyx messaging profile ID
+
+    # Notification settings
+    NOTIFY_MIN_PROFIT: float = 5.0  # Only notify on deals with >= $5 net profit
+    NOTIFY_GLITCH_IMMEDIATE: bool = True  # Send glitch alerts immediately to all channels
+
     # Price Monitoring
     USER_AGENT: str = "Mozilla/5.0 (compatible; BargainHuntrs/1.0; +https://bargainhuntrs.com)"
 
