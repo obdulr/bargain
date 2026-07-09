@@ -75,8 +75,14 @@ async def list_public_deals(
     query = db.query(ArbitrageDeal).filter(
         ArbitrageDeal.is_profitable == True,
         ArbitrageDeal.status == "active",
+        ArbitrageDeal.historical_avg != None,
+        ArbitrageDeal.buy_price > 0,
+    ).filter(
+        ArbitrageDeal.historical_avg > ArbitrageDeal.buy_price
     )
 
+    # Filter to 40%+ discount: buy_price <= historical_avg * 0.60
+    # Using Python-side filter since SQL division with Numeric can be tricky
     if tier:
         query = query.filter(ArbitrageDeal.deal_tier == tier)
 
@@ -84,8 +90,17 @@ async def list_public_deals(
         query = query.filter(ArbitrageDeal.niche == niche)
 
     query = query.order_by(ArbitrageDeal.net_profit.desc())
-    deals = query.offset(offset).limit(limit).all()
+    all_deals = query.all()
 
+    # Apply 40%+ discount filter in Python
+    min_discount = Decimal("0.40")
+    filtered = [
+        d for d in all_deals
+        if d.historical_avg and d.buy_price
+        and (Decimal(str(d.historical_avg)) - Decimal(str(d.buy_price))) / Decimal(str(d.historical_avg)) >= min_discount
+    ]
+
+    deals = filtered[offset:offset + limit]
     return [_deal_to_response(d) for d in deals]
 
 
