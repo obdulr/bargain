@@ -116,6 +116,32 @@ async def scrape_amazon_deals_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to scrape Amazon deals: {str(e)}",
         )
+
+
+@router.post("/deals/scrape-amazon/public", response_model=dict)
+async def scrape_amazon_deals_public(
+    max_deals: int = Query(50, le=100),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape Amazon's Today's Deals — no auth required.
+
+    Used for cron jobs and manual triggers to populate the deals feed.
+    """
+    from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
+
+    try:
+        deals = await scrape_amazon_deals(max_deals=max_deals)
+        saved = save_deals_to_database(deals, db)
+        return {
+            "deals_found": len(deals),
+            "deals_saved": saved,
+            "status": "success",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to scrape Amazon deals: {str(e)}",
+        )
 async def list_niches(
     current_user: User = Depends(get_current_user),
 ):
