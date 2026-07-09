@@ -43,7 +43,7 @@ export default function RootLayout({
           type="text/javascript"
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{
-            __html: `(function(i,m,p,a,c,t){c.ire_o=p;c[p]=c[p]||function(){(c[p].a=c[p].a||[]).push(arguments)};t=a.createElement(m);var z=a.getElementsByTagName(m)[0];t.async=1;t.src=i;z.parentNode.insertBefore(t,z)})('https://utt.impactcdn.com/P-A7467689-f750-4d57-a593-478cb3aecc331.js','script','impactStat',document,window);impactStat('transformLinks');impactStat('trackImpression');`,
+            __html: `(function(i,m,p,a,c,t){c.ire_o=p;c[p]=c[p]||function(){(c[p].a=c[p].a||[]).push(arguments)};t=a.createElement(m);var z=a.getElementsByTagName(m)[0];t.async=1;t.src=i;z.parentNode.insertBefore(t,z)})('https://utt.impactcdn.com/P-A1208408-03fa-4fd4-a07a-20e974bc746d1.js','script','impactStat',document,window);impactStat('transformLinks');impactStat('trackImpression');`,
           }}
         />
         <AuthProvider>{children}</AuthProvider>
