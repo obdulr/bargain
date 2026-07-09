@@ -7,12 +7,19 @@ on recent price history plus volatility analysis.
 This is a PRO/ENTERPRISE feature — free users get basic predictions,
 paid users get detailed analysis.
 """
-import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
 import logging
+import statistics
 
 logger = logging.getLogger(__name__)
+
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+    logger.info("numpy not installed — price predictor using stdlib fallback")
 
 
 def volatility_score(stdev: float, mean: float) -> float:
@@ -59,22 +66,32 @@ class PricePredictor:
                 "message": "Insufficient price history for prediction",
             }
 
-        prices = np.array([float(p["price"]) for p in price_history])
+        prices = [float(p["price"]) for p in price_history]
         current_price = prices[-1]
 
-        # Simple linear regression on last N data points
-        x = np.arange(len(prices))
-        coeffs = np.polyfit(x, prices, 1)
-        slope = coeffs[0]
-
-        # Volatility (standard deviation of price changes)
-        price_changes = np.diff(prices)
-        volatility = float(np.std(price_changes)) if len(price_changes) > 1 else 0
-
-        # Predict next 7 data points
-        future_x = np.arange(len(prices), len(prices) + 7)
-        predicted = np.polyval(coeffs, future_x)
-        predicted_low = float(np.min(predicted))
+        if _HAS_NUMPY:
+            arr = np.array(prices)
+            x = np.arange(len(arr))
+            coeffs = np.polyfit(x, arr, 1)
+            slope = float(coeffs[0])
+            price_changes = np.diff(arr)
+            volatility = float(np.std(price_changes)) if len(price_changes) > 1 else 0
+            future_x = np.arange(len(arr), len(arr) + 7)
+            predicted = np.polyval(coeffs, future_x)
+            predicted_low = float(np.min(predicted))
+        else:
+            # Stdlib fallback: simple linear regression
+            n = len(prices)
+            x_mean = sum(range(n)) / n
+            y_mean = sum(prices) / n
+            num = sum((i - x_mean) * (p - y_mean) for i, p in enumerate(prices))
+            den = sum((i - x_mean) ** 2 for i in range(n))
+            slope = num / den if den != 0 else 0
+            intercept = y_mean - slope * x_mean
+            price_changes = [prices[i+1] - prices[i] for i in range(n-1)]
+            volatility = statistics.stdev(price_changes) if len(price_changes) > 1 else 0
+            predicted = [slope * (n + i) + intercept for i in range(7)]
+            predicted_low = min(predicted)
 
         # Trend analysis
         if slope < -0.5 * volatility:
@@ -103,7 +120,10 @@ class PricePredictor:
 
         # Estimate days to lowest
         if trend == "decreasing":
-            days_to_lowest = int(np.argmin(predicted)) + 1
+            if _HAS_NUMPY:
+                days_to_lowest = int(np.argmin(predicted)) + 1
+            else:
+                days_to_lowest = predicted.index(min(predicted)) + 1
         else:
             days_to_lowest = 0
 
@@ -134,12 +154,19 @@ class PricePredictor:
                 return {"score": min(100, int(discount * 2)), "method": "simple_discount"}
             return {"score": 50, "method": "insufficient_data"}
 
-        prices = np.array([float(p["price"]) for p in price_history])
+        prices = [float(p["price"]) for p in price_history]
 
-        # Features
-        percentile_rank = float(np.sum(prices <= current_price) / len(prices) * 100)  # Lower = better deal
-        price_stdev = float(np.std(prices))
-        z_score = (current_price - float(np.mean(prices))) / max(price_stdev, 0.01)
+        if _HAS_NUMPY:
+            arr = np.array(prices)
+            percentile_rank = float(np.sum(arr <= current_price) / len(arr) * 100)
+            price_stdev = float(np.std(arr))
+            price_mean = float(np.mean(arr))
+        else:
+            percentile_rank = sum(1 for p in prices if p <= current_price) / len(prices) * 100
+            price_stdev = statistics.stdev(prices) if len(prices) > 1 else 0
+            price_mean = statistics.mean(prices)
+
+        z_score = (current_price - price_mean) / max(price_stdev, 0.01)
 
         # Recent trend
         recent_prices = prices[-5:] if len(prices) >= 5 else prices
@@ -150,7 +177,7 @@ class PricePredictor:
         score += max(0, 100 - percentile_rank) * 0.4  # 40% weight: how low is current price vs history
         score += max(0, min(50, -z_score * 15)) * 0.3  # 30% weight: z-score
         score += max(0, min(30, -recent_trend * 2)) * 0.2  # 20% weight: recent downward trend
-        score += max(0, 20 - volatility_score(price_stdev, float(np.mean(prices)))) * 0.1  # 10% weight: stability
+        score += max(0, 20 - volatility_score(price_stdev, price_mean)) * 0.1  # 10% weight: stability
 
         return {
             "score": min(100, max(0, int(score))),

@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, webauthn, coupons, notifications, affiliate
+from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, coupons, notifications, affiliate
 from app.routers.alerts import router as alerts_router, scheduler_router
+
+# WebAuthn (passkeys) is optional — requires python-webauthn package
+try:
+    from app.routers import webauthn
+    _HAS_WEBAUTHN = True
+except ImportError:
+    _HAS_WEBAUTHN = False
 from app.services.scheduler import scheduler
 from app.core.config import settings
 
@@ -32,7 +39,8 @@ except Exception:
     )
 
 app.include_router(auth.router)
-app.include_router(webauthn.router)
+if _HAS_WEBAUTHN:
+    app.include_router(webauthn.router)
 app.include_router(watchlist.router)
 app.include_router(waitlist.router)
 app.include_router(arbitrage.router)
@@ -66,8 +74,9 @@ async def shutdown_event():
 async def root():
     return {
         "message": "BargainHuntrs API",
-        "version": "0.1.0",
-        "status": "operational"
+        "version": "0.2.0",
+        "status": "operational",
+        "deploy_id": "bcrypt-fix-2026-07-08"
     }
 
 
