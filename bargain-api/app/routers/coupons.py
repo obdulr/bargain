@@ -19,6 +19,7 @@ from app.services.coupon_scraper import (
     scrape_all_coupons,
     ScrapedCoupon,
     calculate_discounted_price,
+    is_coupon_source_configured,
 )
 from app.services.arbitrage import apply_coupon_to_opportunity, ArbitrageOpportunity
 from app.services.profit_calculator import calculate_profit, Platform, ProductCategory
@@ -76,6 +77,24 @@ class AppliedCouponResponse(BaseModel):
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
+
+@router.get("/status", response_model=dict)
+async def coupon_source_status(
+    current_user: User = Depends(get_current_user),
+):
+    """Check if a real coupon data source is configured.
+    
+    Returns whether the Impact affiliate network API is configured.
+    When not configured, the coupons page should show a "coming soon"
+    message instead of fake/generated codes.
+    """
+    return {
+        "configured": is_coupon_source_configured(),
+        "source": "impact" if is_coupon_source_configured() else None,
+        "message": "Real coupons from Impact affiliate network" if is_coupon_source_configured()
+                   else "Coupon integration not yet configured. Sign up at app.impact.com to enable real promo codes.",
+    }
+
 
 @router.get("", response_model=List[CouponResponse])
 async def list_coupons(
@@ -170,9 +189,15 @@ async def trigger_scrape(
 ):
     """Trigger a coupon scrape across all sources.
 
-    This runs the scrape synchronously (may take 10-30 seconds depending on
-    number of retailers and source response times).
+    Fetches real promo codes from the Impact affiliate network API.
+    Returns 400 if Impact is not configured.
     """
+    if not is_coupon_source_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Coupon scraping is not configured. Set IMPACT_ACCOUNT_SID and IMPACT_AUTH_TOKEN env vars to fetch real promo codes from the Impact affiliate network.",
+        )
+
     try:
         scraped_coupons = await scrape_all_coupons(retailers=body.retailers)
     except Exception as e:
@@ -308,6 +333,18 @@ async def find_best_coupons_for_deal(
     coupons = query.order_by(CouponCode.discount_value.desc()).limit(limit).all()
 
     return [_coupon_to_response(c) for c in coupons]
+
+
+@router.delete("/all", response_model=dict)
+async def delete_all_coupons(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete all coupons. Useful for clearing stale/fake data."""
+    count = db.query(CouponCode).count()
+    db.query(CouponCode).delete()
+    db.commit()
+    return {"deleted": count}
 
 
 @router.delete("/{coupon_id}", response_model=dict)

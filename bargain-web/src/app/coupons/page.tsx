@@ -9,6 +9,7 @@ import {
   getCoupons,
   searchCoupons,
   getCouponRetailers,
+  getCouponStatus,
   scrapeCoupons,
   type Coupon,
 } from "@/lib/api";
@@ -27,6 +28,7 @@ export default function CouponsPage() {
   const [scrapeResult, setScrapeResult] = useState<string>("");
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [couponSourceConfigured, setCouponSourceConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -64,6 +66,11 @@ export default function CouponsPage() {
 
   useEffect(() => {
     if (idToken) {
+      getCouponStatus(idToken).then((status) => {
+        setCouponSourceConfigured(status.configured);
+      }).catch(() => {
+        setCouponSourceConfigured(false);
+      });
       loadCoupons();
       loadRetailers();
     }
@@ -143,17 +150,45 @@ export default function CouponsPage() {
                   Coupon Codes
                 </h1>
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Scraped promo codes to stack on top of deals for extra savings.
+                  Real promo codes from affiliate networks. Stack on top of deals for extra savings.
                 </p>
               </div>
-              <button
-                onClick={handleScrape}
-                disabled={scraping}
-                className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
-              >
-                {scraping ? "Scraping..." : "Scrape New Coupons"}
-              </button>
+              {couponSourceConfigured && (
+                <button
+                  onClick={handleScrape}
+                  disabled={scraping}
+                  className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+                >
+                  {scraping ? "Fetching..." : "Fetch New Coupons"}
+                </button>
+              )}
             </div>
+
+            {/* Not configured banner */}
+            {couponSourceConfigured === false && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/40">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900">
+                    <svg className="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      Real coupons coming soon
+                    </h3>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      We&apos;re integrating with the Impact affiliate network to bring you real,
+                      verified promo codes from Home Depot, Amazon, Walmart, Target, and more.
+                      No fake codes — every coupon will be a genuine code issued by the retailer.
+                    </p>
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      Check back soon for working coupon codes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {scrapeResult && (
               <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{scrapeResult}</p>
@@ -164,6 +199,9 @@ export default function CouponsPage() {
           </div>
         </section>
 
+        {/* Only show filters and coupons if source is configured */}
+        {couponSourceConfigured && (
+          <>
         {/* Filters */}
         <section className="px-6 py-6 border-b border-zinc-100 dark:border-zinc-800/60">
           <div className="mx-auto max-w-6xl flex flex-wrap items-center gap-4">
@@ -321,6 +359,8 @@ export default function CouponsPage() {
             )}
           </div>
         </section>
+          </>
+        )}
       </main>
 
       <Footer />

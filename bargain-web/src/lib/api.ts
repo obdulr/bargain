@@ -106,6 +106,14 @@ export async function getCouponRetailers(token: string) {
   return fetchWithAuth("/api/v1/coupons/retailers", token, { method: "GET" }) as Promise<string[]>;
 }
 
+export async function getCouponStatus(token: string) {
+  return fetchWithAuth("/api/v1/coupons/status", token, { method: "GET" }) as Promise<{
+    configured: boolean;
+    source: string | null;
+    message: string;
+  }>;
+}
+
 export async function scrapeCoupons(token: string, retailers?: string[]) {
   return fetchWithAuth("/api/v1/coupons/scrape", token, {
     method: "POST",

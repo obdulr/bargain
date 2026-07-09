@@ -394,6 +394,18 @@ async def get_stats(
     }
 
 
+@router.delete("/deals/all", response_model=dict)
+async def delete_all_deals(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete all arbitrage deals. Useful for clearing stale data."""
+    count = db.query(ArbitrageDeal).count()
+    db.query(ArbitrageDeal).delete()
+    db.commit()
+    return {"deleted": count}
+
+
 def _save_opportunity(db: Session, opp: ArbitrageOpportunity) -> ArbitrageDeal:
     """Save an ArbitrageOpportunity to the database."""
     # Check for existing deal with same ASIN (dedup within 24h)

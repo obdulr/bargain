@@ -344,6 +344,10 @@ async def get_ebay_market_price(query: str, limit: int = 10) -> Optional[Decimal
     This is the key function for arbitrage — it tells you what
     the item actually sells for on eBay.
 
+    Uses the product catalog for pricing data (scraping eBay from cloud IPs
+    is reliably blocked). If eBay API credentials are configured, the Browse
+    API is tried first.
+
     Args:
         query: Product name or UPC
         limit: Number of sold listings to analyze
@@ -351,26 +355,34 @@ async def get_ebay_market_price(query: str, limit: int = 10) -> Optional[Decimal
     Returns:
         Median sold price, or None if no data
     """
-    listings = await search_ebay_sold(query, limit=limit)
-    if not listings:
-        return None
+    # Try eBay API first if configured
+    client_id = getattr(settings, "EBAY_CLIENT_ID", "")
+    client_secret = getattr(settings, "EBAY_CLIENT_SECRET", "")
+    if client_id and client_secret:
+        listings = await _search_ebay_sold_api(query, limit=limit, condition="NEW")
+        if listings:
+            prices = sorted(l.price for l in listings)
+            n = len(prices)
+            if n > 0:
+                if n % 2 == 0:
+                    median = (prices[n // 2 - 1] + prices[n // 2]) / 2
+                else:
+                    median = prices[n // 2]
+                return median.quantize(Decimal("0.01"))
 
-    # Filter to only items with positive seller feedback (quality filter)
-    quality_listings = [
-        l for l in listings
-        if l.seller_feedback_pct is None or l.seller_feedback_pct >= 95.0
-    ]
-    if not quality_listings:
-        quality_listings = listings
+    # Use product catalog for pricing ( dependable source)
+    from app.services.product_catalog import CATALOG
 
-    prices = sorted(l.price for l in quality_listings)
-    n = len(prices)
-    if n == 0:
-        return None
+    query_lower = query.lower().strip()
+    for product in CATALOG:
+        prod_title = product.title.lower()
+        # Exact ASIN match
+        if product.asin == query:
+            return product.reference_price
+        # Title contains query or query contains title
+        if prod_title in query_lower or query_lower in prod_title:
+            return product.reference_price
 
-    if n % 2 == 0:
-        median = (prices[n // 2 - 1] + prices[n // 2]) / 2
-    else:
-        median = prices[n // 2]
-
-    return median.quantize(Decimal("0.01"))
+    # Fallback: no match found
+    logger.debug(f"No eBay market price found for '{query}'")
+    return None

@@ -328,6 +328,7 @@ async def scan_amazon_for_arbitrage(
         min_discount=min_discount,
         max_price=max_price,
         limit=limit,
+        niche=niche or "",
     )
 
     logger.info(f"Found {len(products)} Amazon deals, checking eBay prices...")

@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     BESTBUY_AFFILIATE_ID: str = ""  # Best Buy affiliate ID
     RAKUTEN_AFFILIATE_ID: str = ""  # Rakuten/Legacy affiliate ID
 
+    # Impact (affiliate network for real promo codes)
+    IMPACT_ACCOUNT_SID: str = ""  # Impact Account SID (username for API auth)
+    IMPACT_AUTH_TOKEN: str = ""  # Impact Auth Token (password for API auth)
+    IMPACT_PROGRAM_IDS: str = ""  # Comma-separated Impact program IDs to fetch coupons from
+
     # Niche categories for deal scanning
     NICHES: List[str] = [
         "electronics",
