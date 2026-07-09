@@ -112,6 +112,17 @@ def _parse_deal_from_link(link) -> Optional[AmazonDeal]:
     if not title or len(title) < 5:
         return None
 
+    # Clean title — Amazon sometimes appends deal metadata to the link text
+    # e.g. "Product Name37% offLimited time deal$335.98$33598List:$529.99"
+    # We cut at the first occurrence of "% off" or "Limited time" or a price
+    title = re.split(r'\s*\d+%?\s*off', title)[0]
+    title = re.split(r'Limited time deal', title, flags=re.IGNORECASE)[0]
+    title = re.split(r'List:\$', title)[0]
+    title = re.split(r'Typical:\$', title)[0]
+    title = title.strip()
+    if not title or len(title) < 5:
+        return None
+
     # Walk up to find the container with prices (usually 2-3 levels up)
     container = link.parent
     for _ in range(4):
