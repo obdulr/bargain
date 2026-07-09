@@ -110,12 +110,17 @@ export default function Footer() {
         </div>
 
         {/* Bottom row */}
-        <div className="mt-12 border-t border-zinc-100 dark:border-zinc-800 pt-6 flex flex-wrap items-center justify-between gap-4">
-          <p className="text-xs text-zinc-400 dark:text-zinc-600">
-            &copy; {year} BargainHuntrs, Inc. All rights reserved.
-          </p>
-          <p className="text-xs text-zinc-400 dark:text-zinc-600">
-            Not affiliated with Amazon, eBay, Walmart, or any tracked retailer.
+        <div className="mt-12 border-t border-zinc-100 dark:border-zinc-800 pt-6 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="text-xs text-zinc-400 dark:text-zinc-600">
+              &copy; {year} BargainHuntrs, Inc. All rights reserved.
+            </p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-600">
+              Not affiliated with Amazon, eBay, Walmart, or any tracked retailer.
+            </p>
+          </div>
+          <p className="text-xs text-zinc-400 dark:text-zinc-600 max-w-2xl">
+            BargainHuntrs is a participant in the Amazon Associates Program, an affiliate advertising program designed to provide a means for sites to earn advertising fees by advertising and linking to Amazon.com. As an Amazon Associate, we earn from qualifying purchases.
           </p>
         </div>
 
