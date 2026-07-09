@@ -212,7 +212,7 @@ export default function HomePage() {
             <h1 className="text-5xl font-bold tracking-tight text-zinc-900 sm:text-7xl dark:text-zinc-50 leading-[1.08]">
               The bargain edge<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400">
-                your competition doesn&apos;t have.
+                before anyone else.
               </span>
             </h1>
 
