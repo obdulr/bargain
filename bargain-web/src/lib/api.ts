@@ -23,6 +23,25 @@ async function fetchWithAuth(endpoint: string, token: string | null, options: Re
   return response.json();
 }
 
+async function fetchPublic(endpoint: string, options: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `Request failed with ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function getCurrentUser(token: string) {
   return fetchWithAuth("/api/v1/auth/me", token, {
     method: "GET",
@@ -320,4 +339,32 @@ export async function testNotifications(token: string) {
 
 export async function distributeDeal(token: string, dealId: string) {
   return fetchWithAuth(`/api/v1/notifications/deal/${dealId}/distribute`, token, { method: "POST" }) as Promise<{ results: Record<string, boolean> }>;
+}
+
+// ─── Public Deals (no auth required) ────────────────────────────────────────
+
+export async function getPublicDeals(limit = 20, offset = 0) {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(limit));
+  qs.set("offset", String(offset));
+  return fetchPublic(`/api/v1/arbitrage/deals/public?${qs.toString()}`, {
+    method: "GET",
+  }) as Promise<ArbitrageDeal[]>;
+}
+
+export async function clickAffiliatePublic(data: {
+  url: string;
+  retailer?: string;
+  asin?: string;
+  deal_id?: string;
+}) {
+  return fetchPublic("/api/v1/affiliate/click/public", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<{
+    affiliate_url: string;
+    original_url: string;
+    retailer: string;
+    tracked: boolean;
+  }>;
 }

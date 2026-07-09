@@ -97,6 +97,56 @@ async def track_click(
     )
 
 
+@router.post("/click/public", response_model=ClickResponse)
+async def track_click_public(
+    body: ClickRequest,
+    db: Session = Depends(get_db),
+):
+    """Public affiliate click — no authentication required.
+
+    Appends the affiliate tag to the URL and logs the click anonymously.
+    Used by the homepage deals feed so non-logged-in visitors can click
+    affiliate links and generate revenue.
+    """
+    url = body.url or ""
+    retailer = body.retailer or detect_retailer(url)
+    asin = body.asin or ""
+
+    affiliate_url = add_affiliate_tag(url, retailer, asin)
+
+    deal_id_uuid = None
+    if body.deal_id:
+        try:
+            deal_id_uuid = UUID(str(body.deal_id))
+        except (ValueError, TypeError):
+            deal_id_uuid = None
+
+    tracked = False
+    try:
+        click = AffiliateClick(
+            deal_id=deal_id_uuid,
+            user_id=None,
+            retailer=retailer or None,
+            original_url=url,
+            affiliate_url=affiliate_url,
+            asin=asin or None,
+            clicked_at=datetime.utcnow(),
+        )
+        db.add(click)
+        db.commit()
+        tracked = True
+    except Exception as e:
+        logger.warning(f"Failed to log public affiliate click: {e}")
+        db.rollback()
+
+    return ClickResponse(
+        affiliate_url=affiliate_url,
+        original_url=url,
+        retailer=retailer,
+        tracked=tracked,
+    )
+
+
 @router.get("/stats")
 async def click_stats(
     current_user: User = Depends(get_current_user),

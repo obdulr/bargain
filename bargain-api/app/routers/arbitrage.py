@@ -59,6 +59,36 @@ class DealResponse(BaseModel):
     detected_at: str
 
 
+@router.get("/deals/public", response_model=List[DealResponse])
+async def list_public_deals(
+    tier: Optional[str] = Query(None, description="Filter by deal tier"),
+    niche: Optional[str] = Query(None, description="Filter by niche"),
+    limit: int = Query(20, le=50),
+    offset: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Public deals feed — no authentication required.
+
+    Returns active profitable deals for display on the homepage so
+    non-logged-in visitors can browse and click affiliate links.
+    """
+    query = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.is_profitable == True,
+        ArbitrageDeal.status == "active",
+    )
+
+    if tier:
+        query = query.filter(ArbitrageDeal.deal_tier == tier)
+
+    if niche:
+        query = query.filter(ArbitrageDeal.niche == niche)
+
+    query = query.order_by(ArbitrageDeal.net_profit.desc())
+    deals = query.offset(offset).limit(limit).all()
+
+    return [_deal_to_response(d) for d in deals]
+
+
 @router.get("/niches", response_model=List[dict])
 async def list_niches(
     current_user: User = Depends(get_current_user),
