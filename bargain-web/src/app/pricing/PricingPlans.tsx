@@ -65,7 +65,7 @@ export function PricingPlans() {
 
   return (
     <section className="px-6 py-12">
-      <div className="mx-auto max-w-6xl grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto max-w-3xl grid gap-6 sm:grid-cols-2">
         {plans.map((plan) => (
           <div
             key={plan.name}

@@ -8,61 +8,48 @@ import { plans } from "./plans";
 export const metadata: Metadata = {
   title: "Pricing – BargainHuntrs",
   description:
-    "Simple, transparent pricing for every level of arbitrage hustle. Start free, scale when ready.",
+    "Start free, upgrade when you're ready. Simple pricing for deal hunters.",
 };
 
 // ─── Data ──────────────────────────────────────────────────────────────────
 
 const comparisonRows = [
-  { feature: "Glitch & price-error detection", free: false, hustler: true, pro: true, agency: true },
-  { feature: "Cross-platform arbitrage alerts", free: false, hustler: true, pro: true, agency: true },
-  { feature: "True profit calculator (fees + tax + shipping)", free: false, hustler: false, pro: true, agency: true },
-  { feature: "Risk score per deal", free: false, hustler: false, pro: true, agency: true },
-  { feature: "Multi-platform sell price data (eBay, StockX…)", free: false, hustler: false, pro: true, agency: true },
-  { feature: "Price check frequency", free: "Daily", hustler: "Hourly", pro: "5 min", agency: "1 min" },
-  { feature: "Watchlist items", free: "5", hustler: "100", pro: "500", agency: "Unlimited" },
-  { feature: "Price history depth", free: "30 days", hustler: "Full", pro: "Full", agency: "Full" },
-  { feature: "Email alerts", free: true, hustler: true, pro: true, agency: true },
-  { feature: "SMS alerts", free: false, hustler: true, pro: true, agency: true },
-  { feature: "API access", free: false, hustler: false, pro: true, agency: true },
-  { feature: "Team seats", free: "1", hustler: "1", pro: "3", agency: "10" },
-  { feature: "White-label reports", free: false, hustler: false, pro: false, agency: true },
-  { feature: "Custom integrations", free: false, hustler: false, pro: false, agency: true },
-  { feature: "Dedicated support", free: false, hustler: false, pro: false, agency: true },
+  { feature: "Browse all deals", free: true, hunter: true },
+  { feature: "Coupon codes", free: true, hunter: true },
+  { feature: "Email alerts", free: true, hunter: true },
+  { feature: "Instant alerts (real-time)", free: false, hunter: true },
+  { feature: "SMS alerts", free: false, hunter: true },
+  { feature: "Watchlist items", free: "10", hunter: "Unlimited" },
+  { feature: "Price history", free: "30 days", hunter: "Full" },
+  { feature: "Priority deals feed", free: false, hunter: true },
+  { feature: "Early access to glitches", free: false, hunter: true },
+  { feature: "Support", free: "Community", hunter: "Email" },
 ];
 
 const faqs = [
   {
-    q: "Can I cancel or change my plan?",
-    a: "Anytime. Upgrades are immediate and prorated; downgrades apply at period end. No lock-in.",
+    q: "Is the Free plan really free?",
+    a: "Yes, forever. No credit card required. You can browse every deal, use coupon codes, and get daily email alerts without paying a cent.",
   },
   {
-    q: "Is there a free trial?",
-    a: "The Free plan is forever. Paid plans have a 7-day money-back guarantee on your first month.",
+    q: "What do I get with Hunter?",
+    a: "Instant real-time alerts via email and SMS, unlimited watchlist items, full price history, priority access to the best deals, and early alerts when we spot price glitches — all before free users see them.",
   },
   {
-    q: "What retailers do you track?",
-    a: "500+ including Amazon, Walmart, Target, Best Buy, Home Depot, Costco, Newegg, eBay, and more. New retailers added monthly.",
+    q: "Can I cancel anytime?",
+    a: "Yes. Cancel with one click, no questions asked. You'll keep Hunter access until the end of your billing period, then drop back to Free.",
   },
   {
-    q: "How are you different from Tactical Arbitrage?",
-    a: "TA only does Amazon FBA at $59/mo. We work across any platform, start free, and detect price glitches no competitor offers.",
+    q: "Is there a free trial for Hunter?",
+    a: "Your first month of Hunter is backed by a 7-day money-back guarantee. If you haven't found a deal worth the subscription, we'll refund you in full.",
   },
   {
-    q: "Arbitrage alerts vs. glitch detection?",
-    a: "Arbitrage = buy low on one platform, sell high on another. Glitch = retailer pricing errors corrected within hours.",
+    q: "Will you add more plans later?",
+    a: "We may add Pro and Team plans in the future with advanced features like API access and multi-seat accounts. Existing Hunter subscribers will always keep their pricing.",
   },
   {
-    q: "How fast are alerts?",
-    a: "Free: daily. Hustler: hourly. Pro: 5 min. Agency: 1 min. Glitch alerts push immediately on all paid plans.",
-  },
-  {
-    q: "Is the profit calculator accurate?",
-    a: "Factors in marketplace fees, shipping, sales tax, and return risk. Customize your carrier costs in Settings.",
-  },
-  {
-    q: "Annual billing?",
-    a: "Coming soon with 20% off. Join the waitlist to be notified.",
+    q: "How are deals found?",
+    a: "We monitor prices across hundreds of online retailers and surface the best bargains, price drops, coupons, and limited-time promotions to our users.",
   },
 ];
 
@@ -102,12 +89,12 @@ export default function PricingPage() {
             Pricing
           </span>
           <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
-            Priced for hustlers,<br />not hedge funds.
+            Start free.<br />Upgrade when it pays for itself.
           </h1>
           <p className="mt-4 text-base text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
-            Tactical Arbitrage starts at $59. SourceMogul is £79.99. OAGenius is $175.{" "}
+            Other deal tools charge $59+ before you&apos;ve found a single bargain.{" "}
             <strong className="text-zinc-900 dark:text-zinc-50">We start at free.</strong>{" "}
-            No annual commitment, no seat taxes, no gotchas.
+            Upgrade to Hunter for the price of two coffees a month.
           </p>
         </section>
 
@@ -116,14 +103,14 @@ export default function PricingPage() {
 
         {/* ── Detailed comparison table ─────────────────────────────────── */}
         <section className="border-t border-zinc-200 px-6 py-20 dark:border-zinc-800 overflow-x-auto">
-          <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 mb-10 text-center">
-              Full feature comparison
+              What&apos;s included
             </h2>
-            <table className="w-full text-left border-collapse min-w-[600px]">
+            <table className="w-full text-left border-collapse min-w-[500px]">
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                  <th className="py-3 pr-6 text-xs font-semibold text-zinc-500 uppercase tracking-wider w-1/3">
+                  <th className="py-3 pr-6 text-xs font-semibold text-zinc-500 uppercase tracking-wider w-1/2">
                     Feature
                   </th>
                   {plans.map((plan) => (
@@ -157,13 +144,7 @@ export default function PricingPage() {
                       <Cell value={row.free} />
                     </td>
                     <td className="py-3 px-3 text-center bg-zinc-900/[0.03] dark:bg-zinc-50/[0.02]">
-                      <Cell value={row.hustler} highlighted />
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <Cell value={row.pro} />
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <Cell value={row.agency} />
+                      <Cell value={row.hunter} highlighted />
                     </td>
                   </tr>
                 ))}
@@ -179,17 +160,15 @@ export default function PricingPage() {
               7-day money-back guarantee.
             </p>
             <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 max-w-xl mx-auto">
-              Try any paid plan for your first month. If you haven&apos;t found a single deal worth your
-              subscription cost, we&apos;ll refund you in full. No questions, no forms, no fight.
-              <br />
-              We back the product because it works.
+              Try Hunter for your first month. If you haven&apos;t found a single deal worth
+              the $9.99, we&apos;ll refund you in full. No questions, no forms, no fight.
             </p>
           </div>
         </section>
 
         {/* ── FAQ ──────────────────────────────────────────────────────── */}
         <section className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 text-center mb-8">
               Frequently asked questions
             </h2>
@@ -209,18 +188,18 @@ export default function PricingPage() {
         {/* ── CTA ──────────────────────────────────────────────────────── */}
         <section className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-900 dark:bg-zinc-50 px-6 py-20 text-center">
           <h2 className="text-2xl font-bold tracking-tight text-white dark:text-zinc-900">
-            Not sure which plan is right?
+            Find your first deal today.
           </h2>
           <p className="mt-3 text-sm text-zinc-400 dark:text-zinc-600 max-w-lg mx-auto">
-            Start with Free and upgrade the moment you find your first deal. Most hustlers upgrade
-            within their first week. Or{" "}
+            Start free, no credit card needed. Upgrade to Hunter the moment you realize
+            you&apos;re missing deals. Or{" "}
             <Link
               href="/contact"
               className="font-medium underline underline-offset-4 text-zinc-300 dark:text-zinc-700 hover:text-white dark:hover:text-zinc-900 transition-colors"
             >
               get in touch
             </Link>{" "}
-            — we&apos;ll help you pick.
+            — we&apos;ll help you decide.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link

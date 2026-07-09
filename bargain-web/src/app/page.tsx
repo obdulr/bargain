@@ -87,62 +87,28 @@ const plans = [
     name: "Free",
     price: "$0",
     period: "forever",
-    description: "Dip your toes in. No card required.",
+    description: "Start finding deals today. No card required.",
     cta: "Start free",
     href: "/signup",
     highlight: false,
-    features: ["5 watchlist items", "Daily price checks", "Email alerts", "30-day price history"],
+    features: ["Browse all deals", "Coupon codes", "Daily email alerts", "10 watchlist items", "30-day price history"],
   },
   {
-    name: "Hustler",
-    price: "$29",
+    name: "Hunter",
+    price: "$9.99",
     period: "/mo",
-    description: "For side-hustlers ready to flip consistently.",
-    cta: "Go Hustler",
+    description: "Never miss a deal. Instant alerts + unlimited everything.",
+    cta: "Go Hunter",
     href: "/signup",
     highlight: true,
-    badge: "Most popular",
-    features: [
-      "100 watchlist items",
-      "Hourly price checks",
-      "Email + SMS alerts",
-      "Full price history",
-      "Arbitrage alerts",
-      "Glitch detection",
-    ],
-  },
-  {
-    name: "Pro",
-    price: "$79",
-    period: "/mo",
-    description: "For power sellers who run this as a real business.",
-    cta: "Go Pro",
-    href: "/signup",
-    highlight: false,
-    features: [
-      "500 watchlist items",
-      "5-min price checks",
-      "Priority alerts",
-      "True profit calculator",
-      "Multi-platform sell data",
-      "API access",
-    ],
-  },
-  {
-    name: "Agency",
-    price: "$199",
-    period: "/mo",
-    description: "For teams managing multiple reseller accounts.",
-    cta: "Go Agency",
-    href: "/signup",
-    highlight: false,
+    badge: "Best value",
     features: [
       "Unlimited watchlist items",
-      "1-min price checks",
-      "10 team seats",
-      "White-label reports",
-      "Dedicated support",
-      "Custom integrations",
+      "Instant email + SMS alerts",
+      "Full price history",
+      "Priority deals feed",
+      "Early access to glitches",
+      "Email support",
     ],
   },
 ];
@@ -150,7 +116,7 @@ const plans = [
 const testimonials = [
   {
     quote:
-      "I found a $400 glitch on a Nintendo Switch bundle at 2am. Made $280 profit. The Hustler plan paid for itself 10x in the first week.",
+      "I found a price glitch on a Nintendo Switch bundle at 2am. Saved $280. The Hunter plan paid for itself 28x in the first week.",
     author: "Marcus T.",
     role: "Full-time reseller, eBay + Amazon",
     avatar: "MT",
@@ -164,9 +130,9 @@ const testimonials = [
   },
   {
     quote:
-      "We run three eBay stores. The Agency plan's team seats and white-label reports have saved us hours every week. Highly recommend.",
+      "We use BargainHuntrs to find deals across multiple retailers. The instant alerts mean we never miss a price drop. It's saved us hundreds already.",
     author: "Jason & Sarah L.",
-    role: "Agency plan — 3 stores, 6 figures/year",
+    role: "Hunter plan — saved $600+ this month",
     avatar: "JL",
   },
 ];
@@ -392,7 +358,7 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center gap-4">
                 <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">BargainHuntrs</span>
                 <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-semibold text-white">
-                  From $29/mo
+                  From $9.99/mo
                 </span>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -429,7 +395,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
               {plans.map((plan) => (
                 <div
                   key={plan.name}
