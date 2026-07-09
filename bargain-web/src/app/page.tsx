@@ -185,7 +185,7 @@ export default function HomePage() {
     <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
       {/* Impact site verification (content method) */}
       <span hidden aria-hidden="true" style={{ display: "none" }}>
-        Impact-Site-Verification: 5ffce628-360e-460e-a608-358e7d45f463
+        Impact-Site-Verification: 7a6b0c44-3e88-4123-8427-bde7e4e800d7
       </span>
       <Header />
 

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   title: "BargainHuntrs",
   description: "Find arbitrage deals and price glitches before anyone else",
   other: {
-    "impact-site-verification": "5ffce628-360e-460e-a608-358e7d45f463",
+    "impact-site-verification": "7a6b0c44-3e88-4123-8427-bde7e4e800d7",
   },
 };
 
@@ -33,8 +33,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        <meta name="impact-site-verification" content="5ffce628-360e-460e-a608-358e7d45f463" />
-        <meta name="Impact-Site-Verification" content="5ffce628-360e-460e-a608-358e7d45f463" />
+        <meta name="impact-site-verification" content="7a6b0c44-3e88-4123-8427-bde7e4e800d7" />
+        <meta name="Impact-Site-Verification" content="7a6b0c44-3e88-4123-8427-bde7e4e800d7" />
       </head>
       <body className="min-h-full flex flex-col">
         {/* Impact tracking script for affiliate verification */}
