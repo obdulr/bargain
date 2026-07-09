@@ -183,6 +183,10 @@ const stats = [
 export default function HomePage() {
   return (
     <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
+      {/* Impact site verification (content method) */}
+      <span hidden aria-hidden="true" style={{ display: "none" }}>
+        Impact-Site-Verification: 5ffce628-360e-460e-a608-358e7d45f463
+      </span>
       <Header />
 
       <main className="flex-1 flex flex-col">
