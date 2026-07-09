@@ -89,7 +89,33 @@ async def list_public_deals(
     return [_deal_to_response(d) for d in deals]
 
 
-@router.get("/niches", response_model=List[dict])
+@router.post("/deals/scrape-amazon", response_model=dict)
+async def scrape_amazon_deals_endpoint(
+    max_deals: int = Query(50, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Scrape Amazon's Today's Deals page for real, currently-active deals.
+
+    Requires authentication (admin/cron trigger). Fetches genuine discounted
+    products from Amazon's Gold Box and /deals pages and stores them in the
+    database so they appear on the homepage deals feed.
+    """
+    from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
+
+    try:
+        deals = await scrape_amazon_deals(max_deals=max_deals)
+        saved = save_deals_to_database(deals, db)
+        return {
+            "deals_found": len(deals),
+            "deals_saved": saved,
+            "status": "success",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to scrape Amazon deals: {str(e)}",
+        )
 async def list_niches(
     current_user: User = Depends(get_current_user),
 ):
