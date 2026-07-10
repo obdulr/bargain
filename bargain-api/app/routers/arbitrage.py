@@ -195,11 +195,12 @@ async def scrape_all_deals_public(
 ):
     """Public endpoint to scrape all deal sources — no auth required.
 
-    Runs all scrapers (Amazon Gold Box + Slickdeals RSS) and combines
-    the results into the deals database. Used for periodic cron jobs.
+    Runs all scrapers (Amazon Gold Box + RSS feeds + affiliate networks)
+    and combines the results into the deals database. Used for periodic cron jobs.
     """
     from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
-    from app.services.slickdeals_scraper import scrape_slickdeals, save_slickdeals_to_database
+    from app.services.rss_deals_scraper import scrape_all_rss_feeds, save_rss_deals_to_database
+    from app.services.affiliate_networks import fetch_all_affiliate_deals, get_configured_networks
 
     results = {"sources": {}, "total_saved": 0, "status": "success"}
 
@@ -215,17 +216,34 @@ async def scrape_all_deals_public(
     except Exception as e:
         results["sources"]["amazon"] = {"error": str(e)}
 
-    # Slickdeals RSS
+    # RSS feeds (Slickdeals, TechBargains, BensBargains, DansDeals)
     try:
-        slickdeals = await scrape_slickdeals(min_discount=40)
-        slickdeals_saved = save_slickdeals_to_database(slickdeals, db)
-        results["sources"]["slickdeals"] = {
-            "found": len(slickdeals),
-            "saved": slickdeals_saved,
+        rss_deals = await scrape_all_rss_feeds(min_discount=40)
+        rss_saved = save_rss_deals_to_database(rss_deals, db)
+        results["sources"]["rss_feeds"] = {
+            "found": len(rss_deals),
+            "saved": rss_saved,
         }
-        results["total_saved"] += slickdeals_saved
+        results["total_saved"] += rss_saved
     except Exception as e:
-        results["sources"]["slickdeals"] = {"error": str(e)}
+        results["sources"]["rss_feeds"] = {"error": str(e)}
+
+    # Affiliate networks (only if configured)
+    configured = get_configured_networks()
+    if configured:
+        try:
+            affiliate_deals = await fetch_all_affiliate_deals()
+            results["sources"]["affiliate_networks"] = {
+                "configured": configured,
+                "found": len(affiliate_deals),
+            }
+        except Exception as e:
+            results["sources"]["affiliate_networks"] = {"error": str(e)}
+    else:
+        results["sources"]["affiliate_networks"] = {
+            "configured": [],
+            "message": "No affiliate networks configured. Sign up at Rakuten, Awin, or CJ Affiliate."
+        }
 
     return results
 
@@ -373,6 +391,55 @@ async def post_new_deals_to_x_public(
         "total": len(deals_to_post),
         "results": results,
         "status": "success",
+    }
+
+
+@router.get("/affiliate-networks/status", response_model=dict)
+async def affiliate_networks_status():
+    """Check which affiliate networks are configured.
+
+    Returns the status of each affiliate network and signup URLs
+    for those that aren't configured yet.
+    """
+    from app.services.affiliate_networks import get_configured_networks
+
+    configured = get_configured_networks()
+
+    networks = {
+        "rakuten": {
+            "configured": "rakuten" in configured,
+            "signup_url": "https://pubhelp.rakutenadvertising.com/hc/en-us/articles/20898125890573-Publisher-Sign-Up-Process",
+            "difficulty": "Easy — open network, no traffic requirements",
+            "retailers": "Macy's, Sephora, Nordstrom, Adidas, Nike, Puma",
+            "env_vars": ["RAKUTEN_WEBSERVICES_TOKEN", "RAKUTEN_SECURITY_TOKEN"],
+        },
+        "awin": {
+            "configured": "awin" in configured,
+            "signup_url": "https://ui.awin.com/publisher-signup/en",
+            "difficulty": "Medium — requires $1 deposit (refunded)",
+            "retailers": "Walmart, Target, 30K+ merchants (includes former ShareASale)",
+            "env_vars": ["AWIN_API_TOKEN", "AWIN_PUBLISHER_ID"],
+        },
+        "cj": {
+            "configured": "cj" in configured,
+            "signup_url": "https://signup.cj.com/member/signup/publisher/",
+            "difficulty": "Medium-Hard — two-level approval (network + merchants)",
+            "retailers": "Lowe's, Wayfair, GoDaddy, Office Depot, Verizon",
+            "env_vars": ["CJ_ACCESS_TOKEN", "CJ_WEBSITE_ID"],
+        },
+        "skimlinks": {
+            "configured": "skimlinks" in configured,
+            "signup_url": "https://signup.skimlinks.com/en",
+            "difficulty": "Medium — manual review (2 business days)",
+            "retailers": "Walmart, Best Buy, Home Depot, Wayfair, Kohl's",
+            "env_vars": ["SKIMLINKS_PRODUCT_KEY", "SKIMLINKS_CLIENT_ID", "SKIMLINKS_CLIENT_SECRET"],
+        },
+    }
+
+    return {
+        "configured": configured,
+        "networks": networks,
+        "recommendation": "Sign up for Rakuten first (easiest approval), then Awin and CJ Affiliate.",
     }
 
 

@@ -118,6 +118,24 @@ class Settings(BaseSettings):
     X_ACCESS_TOKEN: str = ""
     X_ACCESS_TOKEN_SECRET: str = ""
 
+    # Affiliate Network Credentials
+    # Rakuten Advertising (https://pubhelp.rakutenadvertising.com)
+    RAKUTEN_WEBSERVICES_TOKEN: str = ""
+    RAKUTEN_SECURITY_TOKEN: str = ""
+
+    # Awin (https://ui.awin.com/publisher-signup/en)
+    AWIN_API_TOKEN: str = ""
+    AWIN_PUBLISHER_ID: str = ""
+
+    # CJ Affiliate (https://signup.cj.com)
+    CJ_ACCESS_TOKEN: str = ""
+    CJ_WEBSITE_ID: str = ""
+
+    # Skimlinks (https://signup.skimlinks.com/en)
+    SKIMLINKS_PRODUCT_KEY: str = ""
+    SKIMLINKS_CLIENT_ID: str = ""
+    SKIMLINKS_CLIENT_SECRET: str = ""
+
     # Niche categories for deal scanning
     NICHES: List[str] = [
         "electronics",

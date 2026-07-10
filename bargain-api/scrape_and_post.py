@@ -40,8 +40,9 @@ async def main():
         except Exception as e:
             logger.error(f"Scrape request failed: {e}")
 
-        # Step 2: Fetch latest deals
-        logger.info("=== Step 2: Fetching latest deals ===")
+    # Step 2: Fetch latest deals
+    logger.info("=== Step 2: Fetching latest deals ===")
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             resp = await client.get(f"{API_BASE}/deals/public?limit=20")
             if resp.status_code == 200:
