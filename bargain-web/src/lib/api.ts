@@ -174,6 +174,8 @@ export interface ArbitrageDeal {
   historical_avg?: number;
   discrepancy?: number;
   deal_tier: string;
+  retailer?: string;
+  deal_source?: string;
   net_profit?: number;
   roi?: number;
   total_costs?: number;

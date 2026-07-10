@@ -47,6 +47,8 @@ class DealResponse(BaseModel):
     historical_avg: Optional[float] = None
     discrepancy: Optional[float] = None
     deal_tier: str
+    retailer: Optional[str] = None
+    deal_source: Optional[str] = None
     net_profit: Optional[float] = None
     roi: Optional[float] = None
     total_costs: Optional[float] = None
@@ -157,6 +159,77 @@ async def scrape_amazon_deals_public(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to scrape Amazon deals: {str(e)}",
         )
+
+
+@router.post("/deals/scrape-slickdeals/public", response_model=dict)
+async def scrape_slickdeals_public(
+    min_discount: int = Query(40, ge=0, le=90),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape Slickdeals RSS — no auth required.
+
+    Fetches community-posted deals from Slickdeals' frontpage RSS feed
+    and stores those with >= min_discount% discount in the database.
+    """
+    from app.services.slickdeals_scraper import scrape_slickdeals, save_slickdeals_to_database
+
+    try:
+        deals = await scrape_slickdeals(min_discount=min_discount)
+        saved = save_slickdeals_to_database(deals, db)
+        return {
+            "deals_found": len(deals),
+            "deals_saved": saved,
+            "status": "success",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to scrape Slickdeals: {str(e)}",
+        )
+
+
+@router.post("/deals/scrape-all/public", response_model=dict)
+async def scrape_all_deals_public(
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape all deal sources — no auth required.
+
+    Runs all scrapers (Amazon Gold Box + Slickdeals RSS) and combines
+    the results into the deals database. Used for periodic cron jobs.
+    """
+    from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
+    from app.services.slickdeals_scraper import scrape_slickdeals, save_slickdeals_to_database
+
+    results = {"sources": {}, "total_saved": 0, "status": "success"}
+
+    # Amazon Gold Box
+    try:
+        amazon_deals = await scrape_amazon_deals(max_deals=50)
+        amazon_saved = save_deals_to_database(amazon_deals, db)
+        results["sources"]["amazon"] = {
+            "found": len(amazon_deals),
+            "saved": amazon_saved,
+        }
+        results["total_saved"] += amazon_saved
+    except Exception as e:
+        results["sources"]["amazon"] = {"error": str(e)}
+
+    # Slickdeals RSS
+    try:
+        slickdeals = await scrape_slickdeals(min_discount=40)
+        slickdeals_saved = save_slickdeals_to_database(slickdeals, db)
+        results["sources"]["slickdeals"] = {
+            "found": len(slickdeals),
+            "saved": slickdeals_saved,
+        }
+        results["total_saved"] += slickdeals_saved
+    except Exception as e:
+        results["sources"]["slickdeals"] = {"error": str(e)}
+
+    return results
+
+
+@router.get("/niches", response_model=List[dict])
 async def list_niches(
     current_user: User = Depends(get_current_user),
 ):
@@ -569,6 +642,8 @@ def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
         historical_avg=float(deal.historical_avg) if deal.historical_avg else None,
         discrepancy=float(deal.discrepancy) if deal.discrepancy else None,
         deal_tier=deal.deal_tier,
+        retailer=getattr(deal, "retailer", None) or deal.buy_platform or "amazon",
+        deal_source=getattr(deal, "deal_source", None) or "online",
         net_profit=float(deal.net_profit) if deal.net_profit else None,
         roi=float(deal.roi) if deal.roi else None,
         total_costs=float(deal.total_costs) if deal.total_costs else None,

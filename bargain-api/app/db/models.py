@@ -122,6 +122,8 @@ class ArbitrageDeal(Base):
     image_url = Column(String(1000))
     buy_url = Column(String(1000))
     buy_platform = Column(String(50), default="amazon")
+    retailer = Column(String(100), default="amazon", index=True)  # amazon, home_depot, ace_hardware, corsair, etc.
+    deal_source = Column(String(20), default="online")  # online, in_store
     buy_price = Column(Numeric(10, 2), nullable=False)
     sell_platform = Column(String(50), default="ebay")
     sell_price = Column(Numeric(10, 2), nullable=False)

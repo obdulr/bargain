@@ -1,26 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getPublicDeals, clickAffiliatePublic, type ArbitrageDeal } from "@/lib/api";
 
-// ─── Deal card helpers ─────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
-function formatTier(tier: string): { label: string; color: string } {
-  switch (tier) {
-    case "glitch":
-      return { label: "⚡ GLITCH", color: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400" };
-    case "clearance":
-      return { label: "CLEARANCE", color: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400" };
-    case "arbitrage":
-      return { label: "DEAL", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" };
-    case "watch":
-      return { label: "WATCH", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400" };
-    default:
-      return { label: "DEAL", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" };
+function discountPercent(deal: ArbitrageDeal): number {
+  if (deal.historical_avg && deal.historical_avg > deal.buy_price) {
+    return Math.round((1 - deal.buy_price / deal.historical_avg) * 100);
   }
+  if (deal.original_buy_price && deal.original_buy_price > deal.buy_price) {
+    return Math.round((1 - deal.buy_price / deal.original_buy_price) * 100);
+  }
+  return 0;
 }
 
 function timeAgo(detectedAt: string): string {
@@ -34,14 +29,52 @@ function timeAgo(detectedAt: string): string {
   return `${days}d ago`;
 }
 
-function discountPercent(deal: ArbitrageDeal): number | null {
-  if (deal.original_buy_price && deal.original_buy_price > deal.buy_price) {
-    return Math.round((1 - deal.buy_price / deal.original_buy_price) * 100);
+function retailerDisplayName(retailer?: string): string {
+  if (!retailer) return "Amazon";
+  const map: Record<string, string> = {
+    amazon: "Amazon",
+    home_depot: "Home Depot",
+    ace_hardware: "Ace Hardware",
+    ace: "Ace Hardware",
+    corsair: "Corsair",
+    walmart: "Walmart",
+    target: "Target",
+    best_buy: "Best Buy",
+    costco: "Costco",
+    lowes: "Lowe's",
+    ebay: "eBay",
+  };
+  return map[retailer.toLowerCase()] || retailer.charAt(0).toUpperCase() + retailer.slice(1).replace(/_/g, " ");
+}
+
+function retailerColor(retailer?: string): string {
+  if (!retailer) return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400";
+  const map: Record<string, string> = {
+    amazon: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+    home_depot: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+    ace_hardware: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+    ace: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+    corsair: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400",
+    walmart: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    target: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+    best_buy: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    costco: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    lowes: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+  };
+  return map[retailer.toLowerCase()] || "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400";
+}
+
+function dealTierLabel(tier: string): { label: string; color: string } {
+  switch (tier) {
+    case "glitch":
+      return { label: "PRICE ERROR", color: "bg-red-600 text-white" };
+    case "clearance":
+      return { label: "CLEARANCE", color: "bg-purple-600 text-white" };
+    case "arbitrage":
+      return { label: "DEAL", color: "bg-emerald-600 text-white" };
+    default:
+      return { label: "DEAL", color: "bg-emerald-600 text-white" };
   }
-  if (deal.historical_avg && deal.historical_avg > deal.buy_price) {
-    return Math.round((1 - deal.buy_price / deal.historical_avg) * 100);
-  }
-  return null;
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -51,12 +84,15 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [clickingDeal, setClickingDeal] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRetailer, setFilterRetailer] = useState<string | null>(null);
+  const [filterSource, setFilterSource] = useState<string | null>(null); // online, in_store
 
   const loadDeals = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await getPublicDeals(20, 0);
+      const data = await getPublicDeals(50, 0);
       setDeals(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load deals");
@@ -77,7 +113,7 @@ export default function HomePage() {
       try {
         const result = await clickAffiliatePublic({
           url: deal.buy_url,
-          retailer: "amazon",
+          retailer: deal.retailer || "amazon",
           asin: deal.asin,
           deal_id: deal.id,
         });
@@ -91,6 +127,38 @@ export default function HomePage() {
     []
   );
 
+  // Get unique retailers for filter chips
+  const retailers = useMemo(() => {
+    const set = new Set<string>();
+    deals.forEach((d) => set.add(d.retailer || "amazon"));
+    return Array.from(set);
+  }, [deals]);
+
+  // Filter deals based on search, retailer, and source
+  const filteredDeals = useMemo(() => {
+    return deals.filter((deal) => {
+      // Search filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const title = deal.title.toLowerCase();
+        const retailer = (deal.retailer || "amazon").toLowerCase();
+        const category = (deal.category || "").toLowerCase();
+        if (!title.includes(q) && !retailer.includes(q) && !category.includes(q)) {
+          return false;
+        }
+      }
+      // Retailer filter
+      if (filterRetailer && (deal.retailer || "amazon") !== filterRetailer) {
+        return false;
+      }
+      // Source filter (online/in-store)
+      if (filterSource && (deal.deal_source || "online") !== filterSource) {
+        return false;
+      }
+      return true;
+    });
+  }, [deals, searchQuery, filterRetailer, filterSource]);
+
   return (
     <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
       {/* Impact site verification (content method) */}
@@ -100,27 +168,93 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1 flex flex-col">
-        {/* ── Compact hero ─────────────────────────────────────────────── */}
-        <section className="px-6 py-12 text-center bg-gradient-to-b from-white via-zinc-50/60 to-zinc-100/40 dark:from-zinc-950 dark:via-zinc-900/80 dark:to-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+        {/* ── Hero with search ─────────────────────────────────────────── */}
+        <section className="px-6 py-10 text-center bg-gradient-to-b from-white via-zinc-50/60 to-zinc-100/40 dark:from-zinc-950 dark:via-zinc-900/80 dark:to-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 backdrop-blur px-4 py-1.5 text-xs font-medium text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-400">
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
             </span>
-            {deals.length > 0 ? `${deals.length} live deals right now` : "Scanning for deals..."}
+            {deals.length > 0 ? `${deals.length} live deals — all 40%+ off` : "Scanning for deals..."}
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl dark:text-zinc-50 leading-[1.1]">
-            The bargain edge<br />
+            Hidden deals & price errors<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-400">
-              before anyone else.
+              the moment they go live.
             </span>
           </h1>
           <p className="mt-4 text-base text-zinc-600 dark:text-zinc-400 max-w-xl mx-auto">
-            Real deals from real retailers. No fluff, no fake discounts.{" "}
+            Real clearance deals and price glitches from major retailers.{" "}
             <Link href="/signup" className="font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
-              Sign up for instant alerts →
+              Get instant alerts →
             </Link>
           </p>
+
+          {/* Search bar */}
+          <div className="mt-6 mx-auto max-w-xl">
+            <div className="relative">
+              <svg className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search deals, stores, or categories..."
+                className="w-full rounded-xl border border-zinc-300 bg-white py-3 pl-12 pr-4 text-sm text-zinc-900 shadow-sm transition-colors placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ── Filter chips ─────────────────────────────────────────────── */}
+        <section className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="mx-auto max-w-5xl flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => { setFilterRetailer(null); setFilterSource(null); }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                !filterRetailer && !filterSource
+                  ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              }`}
+            >
+              All Deals
+            </button>
+            <button
+              onClick={() => { setFilterSource("online"); setFilterRetailer(null); }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterSource === "online"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              }`}
+            >
+              Online Deals
+            </button>
+            <button
+              onClick={() => { setFilterSource("in_store"); setFilterRetailer(null); }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                filterSource === "in_store"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              }`}
+            >
+              In-Store
+            </button>
+            <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
+            {retailers.map((r) => (
+              <button
+                key={r}
+                onClick={() => setFilterRetailer(r === filterRetailer ? null : r)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  filterRetailer === r
+                    ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {retailerDisplayName(r)}
+              </button>
+            ))}
+          </div>
         </section>
 
         {/* ── Deals feed ───────────────────────────────────────────────── */}
@@ -137,9 +271,11 @@ export default function HomePage() {
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-emerald-500" />
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Finding the best deals...</p>
               </div>
-            ) : deals.length === 0 ? (
+            ) : filteredDeals.length === 0 ? (
               <div className="text-center py-20">
-                <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">No deals found right now</p>
+                <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                  {searchQuery || filterRetailer || filterSource ? "No deals match your filters" : "No deals found right now"}
+                </p>
                 <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
                   Our scanners are watching for price drops and glitches. Check back soon or{" "}
                   <Link href="/signup" className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-medium">
@@ -152,7 +288,7 @@ export default function HomePage() {
               <>
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    {deals.length} deal{deals.length !== 1 ? "s" : ""} found
+                    {filteredDeals.length} deal{filteredDeals.length !== 1 ? "s" : ""} found
                   </p>
                   <Link
                     href="/deals"
@@ -162,79 +298,78 @@ export default function HomePage() {
                   </Link>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {deals.map((deal) => {
-                    const tier = formatTier(deal.deal_tier);
+                {/* Deal cards — horizontal list like HiddenClearances */}
+                <div className="space-y-3">
+                  {filteredDeals.map((deal) => {
                     const discount = discountPercent(deal);
-                    const savings = deal.original_buy_price
-                      ? deal.original_buy_price - deal.buy_price
-                      : deal.historical_avg
-                      ? deal.historical_avg - deal.buy_price
-                      : null;
+                    const tier = dealTierLabel(deal.deal_tier);
+                    const retailer = deal.retailer || "amazon";
+                    const isOnline = (deal.deal_source || "online") === "online";
 
                     return (
                       <div
                         key={deal.id}
-                        className="group flex flex-col rounded-2xl border border-zinc-200 bg-white transition-all hover:border-zinc-300 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 overflow-hidden"
+                        className="group flex gap-4 rounded-xl border border-zinc-200 bg-white p-4 transition-all hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
                       >
                         {/* Image */}
-                        {deal.image_url && (
-                          <div className="relative aspect-square bg-zinc-50 dark:bg-zinc-800 overflow-hidden">
+                        <div className="relative flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg bg-zinc-50 dark:bg-zinc-800 overflow-hidden">
+                          {deal.image_url ? (
                             <img
                               src={deal.image_url}
                               alt={deal.title}
-                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              className="h-full w-full object-cover"
                             />
-                            {discount && (
-                              <div className="absolute top-3 left-3 rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-bold text-white shadow-md">
-                                {discount}% OFF
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-2xl">🏷️</div>
+                          )}
+                          {/* Discount badge */}
+                          {discount > 0 && (
+                            <div className="absolute top-1 left-1 rounded-md bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
+                              {discount}% OFF
+                            </div>
+                          )}
+                        </div>
 
                         {/* Content */}
-                        <div className="flex flex-col flex-1 p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${tier.color}`}>
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          {/* Top row: tags */}
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${tier.color}`}>
                               {tier.label}
+                            </span>
+                            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${retailerColor(retailer)}`}>
+                              {retailerDisplayName(retailer)}
+                            </span>
+                            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                              isOnline
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400"
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                            }`}>
+                              {isOnline ? "Online" : "In-Store"}
                             </span>
                             <span className="text-xs text-zinc-400 dark:text-zinc-500">
                               {timeAgo(deal.detected_at)}
                             </span>
                           </div>
 
+                          {/* Title */}
                           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 line-clamp-2 mb-2">
                             {deal.title}
                           </h3>
 
-                          {/* Price */}
-                          <div className="flex items-baseline gap-2 mb-3">
-                            <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+                          {/* Price row */}
+                          <div className="flex items-baseline gap-2 mb-2">
+                            <span className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
                               ${deal.buy_price.toFixed(2)}
                             </span>
-                            {deal.original_buy_price && deal.original_buy_price > deal.buy_price && (
+                            {deal.historical_avg && deal.historical_avg > deal.buy_price && (
                               <span className="text-sm text-zinc-400 line-through">
-                                ${deal.original_buy_price.toFixed(2)}
+                                ${deal.historical_avg.toFixed(2)}
                               </span>
                             )}
-                          </div>
-
-                          {/* Savings + profit */}
-                          <div className="flex flex-wrap gap-3 text-xs mb-4">
-                            {savings && (
-                              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                                Save ${savings.toFixed(2)}
-                              </span>
-                            )}
-                            {deal.net_profit && (
-                              <span className="font-medium text-zinc-500 dark:text-zinc-400">
-                                Profit: ${deal.net_profit.toFixed(2)}
-                              </span>
-                            )}
-                            {deal.applied_coupon_code && (
-                              <span className="rounded-md bg-emerald-50 px-2 py-0.5 font-medium text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
-                                🎫 {deal.applied_coupon_code}
+                            {discount > 0 && (
+                              <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                                {discount}% OFF
                               </span>
                             )}
                           </div>
@@ -245,21 +380,18 @@ export default function HomePage() {
                               <button
                                 onClick={(e) => handleDealClick(deal, e)}
                                 disabled={clickingDeal === deal.id}
-                                className="w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                                className="inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-emerald-500 dark:hover:bg-emerald-400"
                               >
-                                {clickingDeal === deal.id ? "Opening..." : "Get Deal →"}
+                                {clickingDeal === deal.id ? "Opening..." : "View Deal →"}
                               </button>
                             ) : (
                               <Link
                                 href="/signup"
-                                className="block w-full rounded-xl bg-zinc-100 px-4 py-2.5 text-center text-sm font-semibold text-zinc-600 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                                className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-600 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                               >
                                 Sign up to view
                               </Link>
                             )}
-                            <p className="mt-1.5 text-center text-xs text-zinc-400 dark:text-zinc-600">
-                              Affiliate link — no extra cost to you
-                            </p>
                           </div>
                         </div>
                       </div>
