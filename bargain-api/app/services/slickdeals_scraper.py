@@ -107,6 +107,33 @@ def _extract_product_url(description: str) -> str:
     return ""
 
 
+def _extract_amazon_asin(description: str) -> Optional[str]:
+    """Extract an Amazon ASIN from the deal description or URL."""
+    # Look for /dp/ASIN pattern in any URL
+    match = re.search(r'/dp/([A-Z0-9]{10})', description)
+    if match:
+        return match.group(1)
+    # Look for /gp/product/ASIN
+    match = re.search(r'/gp/product/([A-Z0-9]{10})', description)
+    if match:
+        return match.group(1)
+    # Look for bare ASIN patterns (B0 followed by 8 alphanumeric chars)
+    match = re.search(r'\b(B0[A-Z0-9]{8})\b', description)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _construct_amazon_image_url(asin: str) -> str:
+    """Construct an Amazon product image URL from an ASIN.
+
+    Amazon stores product images at predictable URLs based on the ASIN.
+    We use the m.media-amazon.com CDN with a standard size.
+    Note: This is a best-effort URL — the actual image ID varies per product.
+    """
+    return f"https://m.media-amazon.com/images/I/{asin}._AC_SL240_.jpg"
+
+
 def _extract_prices(title: str, description: str) -> tuple[Optional[Decimal], Optional[Decimal]]:
     """Extract deal price and original price from title and description.
 
@@ -227,6 +254,10 @@ def _parse_slickdeals_rss(html: str) -> list[Slickdeal]:
             # Extract product URL
             product_url = _extract_product_url(description)
 
+            # Extract Amazon ASIN for image URL
+            asin = _extract_amazon_asin(f"{description} {product_url}")
+            image_url = _construct_amazon_image_url(asin) if asin else None
+
             # Clean title
             clean_title = _clean_title(title)
 
@@ -238,6 +269,7 @@ def _parse_slickdeals_rss(html: str) -> list[Slickdeal]:
                 original_price=original_price,
                 discount_percent=discount_percent,
                 retailer=retailer,
+                image_url=image_url,
                 description=description[:1000],
                 posted_at=posted_at,
             )
@@ -288,14 +320,15 @@ def save_slickdeals_to_database(deals: list[Slickdeal], db_session) -> int:
             if not deal.deal_price:
                 continue
 
-            # Generate a unique ID for the deal (use deal_url hash as ASIN substitute)
-            deal_id_hash = str(abs(hash(deal.deal_url)))[:20]
+            # Extract ASIN for Amazon deals
+            asin = _extract_amazon_asin(f"{deal.description} {deal.product_url}")
+            deal_id = asin or str(abs(hash(deal.deal_url)))[:20]
 
             # Check if deal already exists
             existing = (
                 db_session.query(ArbitrageDeal)
                 .filter(
-                    ArbitrageDeal.asin == deal_id_hash,
+                    ArbitrageDeal.asin == deal_id,
                     ArbitrageDeal.status == "active",
                 )
                 .first()
@@ -303,24 +336,33 @@ def save_slickdeals_to_database(deals: list[Slickdeal], db_session) -> int:
             if existing:
                 continue  # Skip duplicates
 
-            # Build the buy URL — use product URL if available, otherwise Slickdeals URL
+            # Build the buy URL
             buy_url = deal.product_url or deal.deal_url
-            if deal.retailer == "amazon" and buy_url:
-                # Add affiliate tag for Amazon links
+            if deal.retailer == "amazon" and asin:
+                buy_url = add_affiliate_tag(
+                    f"https://www.amazon.com/dp/{asin}", "amazon", asin
+                )
+            elif deal.retailer == "amazon" and buy_url:
                 asin_match = re.search(r'/dp/([A-Z0-9]{10})', buy_url)
                 if asin_match:
-                    asin = asin_match.group(1)
-                    deal_id_hash = asin  # Use real ASIN
-                    buy_url = add_affiliate_tag(buy_url, "amazon", asin)
+                    buy_url = add_affiliate_tag(buy_url, "amazon", asin_match.group(1))
+
+            # Construct image URL if we don't have one but have an ASIN
+            image_url = deal.image_url
+            if not image_url and asin:
+                image_url = _construct_amazon_image_url(asin)
 
             original_price = deal.original_price or deal.deal_price
             net_profit = original_price - deal.deal_price if original_price else D("0")
             roi = float(net_profit / original_price) if original_price and original_price > 0 else 0
 
+            # Price errors (75%+ off) get the "glitch" tier
+            tier = "glitch" if (deal.discount_percent or 0) >= 75 else "clearance"
+
             new_deal = ArbitrageDeal(
-                asin=deal_id_hash,
+                asin=deal_id,
                 title=deal.title,
-                image_url=deal.image_url,
+                image_url=image_url,
                 buy_url=buy_url,
                 buy_platform=deal.retailer,
                 retailer=deal.retailer,
@@ -329,7 +371,7 @@ def save_slickdeals_to_database(deals: list[Slickdeal], db_session) -> int:
                 sell_platform="slickdeals",
                 sell_price=original_price,
                 historical_avg=original_price,
-                deal_tier="clearance" if deal.discount_percent and deal.discount_percent < 70 else "glitch",
+                deal_tier=tier,
                 net_profit=net_profit,
                 roi=roi,
                 is_profitable=True,

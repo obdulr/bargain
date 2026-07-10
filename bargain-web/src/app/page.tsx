@@ -77,6 +77,31 @@ function dealTierLabel(tier: string): { label: string; color: string } {
   }
 }
 
+function categoryIcon(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes("headphone") || t.includes("earbud") || t.includes("earphone") || t.includes("speaker") || t.includes("audio")) return "🎧";
+  if (t.includes("tv") || t.includes("monitor") || t.includes("display") || t.includes("screen")) return "📺";
+  if (t.includes("laptop") || t.includes("computer") || t.includes("pc") || t.includes("tablet")) return "💻";
+  if (t.includes("phone") || t.includes("smartphone") || t.includes("mobile")) return "📱";
+  if (t.includes("camera") || t.includes("lens")) return "📷";
+  if (t.includes("gaming") || t.includes("game") || t.includes("console") || t.includes("xbox") || t.includes("playstation") || t.includes("nintendo")) return "🎮";
+  if (t.includes("tool") || t.includes("drill") || t.includes("saw") || t.includes("hammer")) return "🔧";
+  if (t.includes("kitchen") || t.includes("blender") || t.includes("cook") || t.includes("pot") || t.includes("pan")) return "🍳";
+  if (t.includes("fan") || t.includes("air") || t.includes("heater") || t.includes("cool")) return "❄️";
+  if (t.includes("chair") || t.includes("desk") || t.includes("table") || t.includes("bed") || t.includes("furniture")) return "🪑";
+  if (t.includes("toy") || t.includes("lego") || t.includes("kids") || t.includes("baby")) return "🧸";
+  if (t.includes("fitness") || t.includes("exercise") || t.includes("dumbbell") || t.includes("gym") || t.includes("workout")) return "💪";
+  if (t.includes("garden") || t.includes("plant") || t.includes("outdoor")) return "🌱";
+  if (t.includes("pet") || t.includes("dog") || t.includes("cat") || t.includes("bird")) return "🐾";
+  if (t.includes("food") || t.includes("snack") || t.includes("drink") || t.includes("coffee")) return "🍔";
+  if (t.includes("beauty") || t.includes("skin") || t.includes("face") || t.includes("hair")) return "💄";
+  if (t.includes("watch") || t.includes("smartwatch") || t.includes("fitness tracker")) return "⌚";
+  if (t.includes("printer") || t.includes("label")) return "🖨️";
+  if (t.includes("pen") || t.includes("paper") || t.includes("office")) return "✏️";
+  if (t.includes("cd") || t.includes("dvd") || t.includes("vinyl") || t.includes("music")) return "💿";
+  return "🏷️";
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
@@ -318,14 +343,34 @@ export default function HomePage() {
                               src={deal.image_url}
                               alt={deal.title}
                               className="h-full w-full object-cover"
+                              onError={(e) => {
+                                // Fallback to category icon if image fails to load
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector(".icon-fallback")) {
+                                  const fallback = document.createElement("div");
+                                  fallback.className = "icon-fallback flex h-full w-full items-center justify-center text-3xl";
+                                  fallback.textContent = categoryIcon(deal.title);
+                                  parent.appendChild(fallback);
+                                }
+                              }}
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-2xl">🏷️</div>
+                            <div className="flex h-full w-full items-center justify-center text-3xl">
+                              {categoryIcon(deal.title)}
+                            </div>
                           )}
                           {/* Discount badge */}
                           {discount > 0 && (
                             <div className="absolute top-1 left-1 rounded-md bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
                               {discount}% OFF
+                            </div>
+                          )}
+                          {/* Premium badge for price errors */}
+                          {deal.deal_tier === "glitch" && (
+                            <div className="absolute bottom-1 left-1 rounded-md bg-gradient-to-r from-amber-500 to-yellow-400 px-1.5 py-0.5 text-xs font-bold text-white shadow-sm">
+                              PREMIUM
                             </div>
                           )}
                         </div>
@@ -376,7 +421,18 @@ export default function HomePage() {
 
                           {/* CTA */}
                           <div className="mt-auto">
-                            {deal.buy_url ? (
+                            {deal.deal_tier === "glitch" ? (
+                              // Price errors are premium — gate the link
+                              <Link
+                                href="/pricing"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 px-4 py-2 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+                              >
+                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                                Unlock with Hunter →
+                              </Link>
+                            ) : deal.buy_url ? (
                               <button
                                 onClick={(e) => handleDealClick(deal, e)}
                                 disabled={clickingDeal === deal.id}
