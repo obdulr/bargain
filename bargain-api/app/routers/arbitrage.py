@@ -231,13 +231,14 @@ async def scrape_all_deals_public(
 
 @router.post("/deals/update-images/public", response_model=dict)
 async def update_deal_images_public(
-    max_updates: int = Query(20, le=50),
+    max_updates: int = Query(10, le=20),
     db: Session = Depends(get_db),
 ):
     """Public endpoint to fetch missing deal images — no auth required.
 
     Iterates through active deals without images and fetches them
     from Amazon product pages. Rate-limited to avoid blocking.
+    Keeps max_updates low to avoid Railway timeout.
     """
     from app.services.amazon_deals_scraper import update_missing_images
 

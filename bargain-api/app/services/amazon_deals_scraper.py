@@ -384,7 +384,7 @@ async def update_missing_images(db_session, max_updates: int = 20) -> int:
     logger.info(f"Fetching images for {len(deals_without_images)} deals...")
     updated = 0
 
-    async with ScrapingClient(rate_limit_seconds=5.0) as client:
+    async with ScrapingClient(rate_limit_seconds=2.0) as client:
         for deal in deals_without_images:
             try:
                 image_url = await fetch_amazon_image_for_asin(deal.asin, client)
