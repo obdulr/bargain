@@ -5,9 +5,8 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV_LINKS = [
-  { href: "/#features", label: "Features" },
-  { href: "/pricing", label: "Pricing" },
   { href: "/deals", label: "Deals" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/coupons", label: "Coupons" },
   { href: "/contact", label: "Waitlist" },
 ];
