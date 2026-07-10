@@ -268,11 +268,11 @@ async def scrape_amazon_deals(max_deals: int = 50) -> list[AmazonDeal]:
                 all_deals.extend(new_deals)
                 logger.info(f"Found {len(new_deals)} additional deals on /deals page")
 
-    # Sort by discount percentage (highest first), filter to 40%+ only
-    filtered = [d for d in all_deals if (d.discount_percent or 0) >= 40]
-    logger.info(f"Filtered to {len(filtered)} deals with 40%+ discount (from {len(all_deals)} total)")
-    filtered.sort(key=lambda d: d.discount_percent or 0, reverse=True)
-    return filtered[:max_deals]
+    # Sort by discount percentage (highest first)
+    # Note: We don't filter by discount here — the API endpoint filters at query time.
+    # This lets us keep all deals in the database and adjust the threshold without re-scraping.
+    all_deals.sort(key=lambda d: d.discount_percent or 0, reverse=True)
+    return all_deals[:max_deals]
 
 
 def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
