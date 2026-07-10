@@ -27,4 +27,4 @@ WORKDIR /app/bargain-api
 
 EXPOSE 4030
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-4030}"]
+CMD ["sh", "-c", "cd /app/bargain-api && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-4030}"]
