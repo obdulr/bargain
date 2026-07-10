@@ -9,6 +9,7 @@ python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+tweepy>=4.14.0
 # curl_cffi is optional — provides TLS fingerprint impersonation for scraping.
 # Commented out because it requires native libcurl and may fail on some build envs.
 # Install manually if needed: pip install curl_cffi

@@ -5,6 +5,7 @@ Endpoints for scanning, viewing, and managing arbitrage opportunities.
 """
 
 from decimal import Decimal
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -253,6 +254,126 @@ async def update_deal_images_public(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update images: {str(e)}",
         )
+
+
+@router.post("/deals/{deal_id}/post-to-x/public", response_model=dict)
+async def post_deal_to_x_public(
+    deal_id: str,
+    db: Session = Depends(get_db),
+):
+    """Post a specific deal to X (@bargain4huntrs) — no auth required.
+
+    Formats the deal as a tweet with discount %, price, and affiliate link,
+    then posts it to the @bargain4huntrs X account via Chrome automation.
+    """
+    from app.services.x_browser_poster import post_deal_to_x, is_configured
+
+    if not is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X browser automation not configured. Requires Chrome with Profile 10.",
+        )
+
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    discount = 0
+    if deal.historical_avg and deal.historical_avg > deal.buy_price:
+        discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+    result = await post_deal_to_x(
+        title=deal.title,
+        deal_price=float(deal.buy_price),
+        original_price=float(deal.historical_avg) if deal.historical_avg else None,
+        discount_percent=discount,
+        retailer=getattr(deal, "retailer", None) or "amazon",
+        deal_url=deal.buy_url or "",
+        deal_tier=deal.deal_tier,
+        image_url=deal.image_url,
+    )
+
+    if result.get("status") == "success":
+        deal.alerted_at = datetime.utcnow()
+        db.commit()
+
+    return result
+
+
+@router.post("/deals/post-new-to-x/public", response_model=dict)
+async def post_new_deals_to_x_public(
+    max_posts: int = Query(3, le=5),
+    db: Session = Depends(get_db),
+):
+    """Post deals that haven't been posted to X yet — no auth required.
+
+    Finds active deals where alerted_at is NULL, posts them to X via
+    Chrome automation, and marks them as alerted. Limits to max_posts
+    to avoid timeout (each post takes ~30s via browser).
+    """
+    from app.services.x_browser_poster import post_deal_to_x, is_configured
+
+    if not is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X browser automation not configured.",
+        )
+
+    deals_to_post = (
+        db.query(ArbitrageDeal)
+        .filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.is_profitable == True,
+            ArbitrageDeal.alerted_at == None,
+        )
+        .order_by(ArbitrageDeal.detected_at.desc())
+        .limit(max_posts)
+        .all()
+    )
+
+    if not deals_to_post:
+        return {"posted": 0, "status": "success", "message": "No new deals to post"}
+
+    results = []
+    posted = 0
+    for deal in deals_to_post:
+        discount = 0
+        if deal.historical_avg and deal.historical_avg > deal.buy_price:
+            discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+        result = await post_deal_to_x(
+            title=deal.title,
+            deal_price=float(deal.buy_price),
+            original_price=float(deal.historical_avg) if deal.historical_avg else None,
+            discount_percent=discount,
+            retailer=getattr(deal, "retailer", None) or "amazon",
+            deal_url=deal.buy_url or "",
+            deal_tier=deal.deal_tier,
+            image_url=deal.image_url,
+        )
+
+        if result.get("status") == "success":
+            posted += 1
+            deal.alerted_at = datetime.utcnow()
+            db.commit()
+            results.append({
+                "deal_id": str(deal.id),
+                "title": deal.title[:60],
+                "tweet_url": result.get("url"),
+            })
+        else:
+            results.append({
+                "deal_id": str(deal.id),
+                "title": deal.title[:60],
+                "error": result.get("error"),
+            })
+
+    return {
+        "posted": posted,
+        "total": len(deals_to_post),
+        "results": results,
+        "status": "success",
+    }
 
 
 @router.get("/niches", response_model=List[dict])

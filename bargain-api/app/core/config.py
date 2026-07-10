@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     IMPACT_AUTH_TOKEN: str = ""  # Impact Auth Token (password for API auth)
     IMPACT_PROGRAM_IDS: str = ""  # Comma-separated Impact program IDs to fetch coupons from
 
+    # X (Twitter) API credentials for auto-posting deals
+    X_CONSUMER_KEY: str = ""
+    X_CONSUMER_SECRET: str = ""
+    X_ACCESS_TOKEN: str = ""
+    X_ACCESS_TOKEN_SECRET: str = ""
+
     # Niche categories for deal scanning
     NICHES: List[str] = [
         "electronics",
