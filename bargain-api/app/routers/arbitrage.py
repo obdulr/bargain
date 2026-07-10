@@ -229,6 +229,31 @@ async def scrape_all_deals_public(
     return results
 
 
+@router.post("/deals/update-images/public", response_model=dict)
+async def update_deal_images_public(
+    max_updates: int = Query(20, le=50),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to fetch missing deal images — no auth required.
+
+    Iterates through active deals without images and fetches them
+    from Amazon product pages. Rate-limited to avoid blocking.
+    """
+    from app.services.amazon_deals_scraper import update_missing_images
+
+    try:
+        updated = await update_missing_images(db, max_updates=max_updates)
+        return {
+            "images_updated": updated,
+            "status": "success",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update images: {str(e)}",
+        )
+
+
 @router.get("/niches", response_model=List[dict])
 async def list_niches(
     current_user: User = Depends(get_current_user),

@@ -210,6 +210,43 @@ def _parse_deal_from_link(link) -> Optional[AmazonDeal]:
     )
 
 
+async def fetch_amazon_image_for_asin(asin: str, client: ScrapingClient) -> Optional[str]:
+    """Fetch the product image URL from an Amazon product page.
+
+    Uses a longer delay between requests to avoid rate limiting.
+    Returns the image URL or None if the page couldn't be fetched.
+    """
+    url = f"https://www.amazon.com/dp/{asin}"
+    html = await client.get_html(url, referer="https://www.amazon.com")
+    if not html:
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Try og:image meta tag (most reliable)
+    og = soup.select_one('meta[property="og:image"]')
+    if og:
+        content = og.get("content", "")
+        if content and "media-amazon" in content:
+            return content
+
+    # Try main product image selectors
+    for selector in [
+        "#landingImage",
+        "#imgBlkFront",
+        "#main-image",
+        "img[data-old-hires]",
+        "#imgTagWrapperId img",
+    ]:
+        img = soup.select_one(selector)
+        if img:
+            src = img.get("data-old-hires") or img.get("src") or ""
+            if src and "media-amazon" in src and "transparent" not in src:
+                return src
+
+    return None
+
+
 async def scrape_amazon_deals(max_deals: int = 50) -> list[AmazonDeal]:
     """Scrape Amazon's Today's Deals page for real active deals."""
     logger.info("Scraping Amazon Today's Deals page...")
@@ -295,6 +332,8 @@ def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
                 image_url=deal.image_url,
                 buy_url=deal.url,
                 buy_platform="amazon",
+                retailer="amazon",
+                deal_source="online",
                 buy_price=deal.deal_price,
                 sell_platform="amazon",
                 sell_price=sell_price,
@@ -317,3 +356,48 @@ def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
 
     logger.info(f"Saved {saved} deals to database")
     return saved
+
+
+async def update_missing_images(db_session, max_updates: int = 20) -> int:
+    """Fetch and update images for deals that are missing them.
+
+    Iterates through active deals without image_url and fetches the
+    image from Amazon's product page. Rate-limited to avoid blocking.
+    """
+    from app.db.models import ArbitrageDeal
+
+    deals_without_images = (
+        db_session.query(ArbitrageDeal)
+        .filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.retailer == "amazon",
+            (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+        )
+        .limit(max_updates)
+        .all()
+    )
+
+    if not deals_without_images:
+        logger.info("No deals missing images")
+        return 0
+
+    logger.info(f"Fetching images for {len(deals_without_images)} deals...")
+    updated = 0
+
+    async with ScrapingClient(rate_limit_seconds=5.0) as client:
+        for deal in deals_without_images:
+            try:
+                image_url = await fetch_amazon_image_for_asin(deal.asin, client)
+                if image_url:
+                    deal.image_url = image_url
+                    db_session.commit()
+                    updated += 1
+                    logger.info(f"Got image for {deal.asin}: {image_url[:60]}")
+                else:
+                    logger.debug(f"No image found for {deal.asin}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch image for {deal.asin}: {e}")
+                db_session.rollback()
+
+    logger.info(f"Updated {updated} deal images")
+    return updated
