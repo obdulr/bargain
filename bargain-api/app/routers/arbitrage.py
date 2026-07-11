@@ -254,16 +254,25 @@ async def scrape_all_deals_public(
         try:
             impact_deals = await fetch_all_impact_deals()
             impact_saved = 0
+            impact_errors = 0
             for deal in impact_deals:
                 try:
+                    if not deal.get("deal_price") or not deal.get("title"):
+                        continue
+
                     deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
-                    existing = db.query(ArbitrageDeal).filter(ArbitrageDeal.asin == deal_id).first()
+
+                    # Check for duplicates
+                    existing = db.query(ArbitrageDeal).filter(
+                        ArbitrageDeal.asin == deal_id,
+                        ArbitrageDeal.status == "active",
+                    ).first()
                     if existing:
                         continue
 
                     orig = deal.get("original_price") or 0
                     buy = deal.get("deal_price") or 0
-                    if not buy:
+                    if not buy or buy <= 0:
                         continue
 
                     tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
@@ -291,11 +300,14 @@ async def scrape_all_deals_public(
                     impact_saved += 1
                 except Exception as e:
                     db.rollback()
-                    logger.warning(f"Failed to save Impact deal: {e}")
+                    impact_errors += 1
+                    if impact_errors <= 3:
+                        logger.warning(f"Failed to save Impact deal: {e}")
 
             results["sources"]["impact"] = {
                 "found": len(impact_deals),
                 "saved": impact_saved,
+                "errors": impact_errors,
             }
             results["total_saved"] += impact_saved
         except Exception as e:
