@@ -98,8 +98,9 @@ async def list_public_deals(
     query = query.order_by(ArbitrageDeal.net_profit.desc())
     all_deals = query.all()
 
-    # Apply 40%+ discount filter in Python
-    min_discount = Decimal("0.40")
+    # Apply 20%+ discount filter in Python (lowered from 40% to include
+    # Impact.com/Walmart deals which typically have 20-40% discounts)
+    min_discount = Decimal("0.20")
     filtered = [
         d for d in all_deals
         if d.historical_avg and d.buy_price
