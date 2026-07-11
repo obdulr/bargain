@@ -224,7 +224,7 @@ async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 
     return products
 
 
-async def fetch_discounted_products(min_discount: int = 40, max_products: int = 50) -> list[ImpactProduct]:
+async def fetch_discounted_products(min_discount: int = 20, max_products: int = 50) -> list[ImpactProduct]:
     """Fetch products with discounts from Impact.com catalogs.
 
     Scans smaller catalogs for products with sale prices, filtering to
@@ -280,7 +280,7 @@ async def fetch_all_impact_deals() -> list[dict]:
     if not _is_configured():
         return []
 
-    products = await fetch_discounted_products(min_discount=40, max_products=50)
+    products = await fetch_discounted_products(min_discount=20, max_products=50)
 
     deals = []
     for product in products:
