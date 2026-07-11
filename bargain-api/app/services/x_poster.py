@@ -105,7 +105,7 @@ async def post_to_buffer(tweet_text: str) -> dict:
     # Buffer GraphQL mutation to create a post
     mutation = """
     mutation CreatePost($input: CreatePostInput!) {
-      postCreate(input: $input) {
+      createPost(input: $input) {
         __typename
         ... on PostActionSuccess {
           post {
@@ -113,7 +113,7 @@ async def post_to_buffer(tweet_text: str) -> dict:
             status
           }
         }
-        ... on PostActionError {
+        ... on MutationError {
           message
         }
       }
@@ -123,9 +123,9 @@ async def post_to_buffer(tweet_text: str) -> dict:
     variables = {
         "input": {
             "channelId": channel_id,
-            "content": {"text": tweet_text},
-            "schedulingType": "AUTOMATIC",
-            "mode": "ADD_TO_QUEUE",
+            "text": tweet_text,
+            "schedulingType": "automatic",
+            "mode": "addToQueue",
         }
     }
 
@@ -142,7 +142,14 @@ async def post_to_buffer(tweet_text: str) -> dict:
 
             if resp.status_code == 200:
                 data = resp.json()
-                result = data.get("data", {}).get("postCreate", {})
+
+                # Check for GraphQL errors
+                if data.get("errors"):
+                    error_msg = data["errors"][0].get("message", "Unknown error")
+                    logger.error(f"Buffer GraphQL error: {error_msg}")
+                    return {"status": "error", "error": error_msg}
+
+                result = data.get("data", {}).get("createPost", {})
 
                 if result.get("__typename") == "PostActionSuccess":
                     post = result.get("post", {})
