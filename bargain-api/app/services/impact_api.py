@@ -1,22 +1,23 @@
-"""Impact Affiliate Network API client.
+"""Impact.com Affiliate API Integration.
 
-Fetches real, brand-issued promo codes from the Impact partner API.
-Each coupon returned is a genuine code that the retailer has actually
-issued — not a generated/fake code.
+Fetches deals, products, and promo codes from Impact.com brand partnerships.
+Uses the Partner API v16 with HTTP Basic auth.
 
-API docs: https://integrations.impact.com/partner-api-reference/reference/promo-codes/promo-codes
+Env vars:
+  IMPACT_ACCOUNT_SID — Account SID from Impact.com API settings
+  IMPACT_AUTH_TOKEN  — Auth Token from Impact.com API settings
 
-Required env vars:
-  IMPACT_ACCOUNT_SID  — Impact Account SID (used as API username)
-  IMPACT_AUTH_TOKEN   — Impact Auth Token (used as API password)
-  IMPACT_PROGRAM_IDS  — Optional comma-separated program IDs to filter by
+API Base: https://api.impact.com/Mediapartners/{AccountSID}/...
+Version: 16 (set via IR-Version header or IrVersion query param)
 """
+import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-import asyncio
+from urllib.parse import quote
+
 import httpx
 
 from app.core.config import settings
@@ -24,245 +25,308 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 IMPACT_API_BASE = "https://api.impact.com"
-IMPACT_PROMO_CODES_ENDPOINT = "/ImpactPartner/v15/PromoCodes"
+IMPACT_API_VERSION = "16"
+
+
+def _is_configured() -> bool:
+    return bool(getattr(settings, "IMPACT_ACCOUNT_SID", "")) and \
+           bool(getattr(settings, "IMPACT_AUTH_TOKEN", ""))
+
+
+def _get_auth():
+    return (settings.IMPACT_ACCOUNT_SID, settings.IMPACT_AUTH_TOKEN)
+
+
+def _get_headers():
+    return {
+        "Accept": "application/json",
+        "IR-Version": IMPACT_API_VERSION,
+    }
 
 
 @dataclass
-class ImpactPromoCode:
-    """A real promo code from Impact's API."""
-    code: str
-    program_name: str  # e.g. "Home Depot"
-    retailer: str  # normalized retailer key (e.g. "homedepot")
-    title: str
+class ImpactCampaign:
+    """A brand partnership campaign from Impact.com."""
+    campaign_id: str
+    campaign_name: str
+    advertiser_name: str
+    advertiser_url: str
+    campaign_logo: str = ""
+    campaign_description: str = ""
+
+
+@dataclass
+class ImpactProduct:
+    """A product from an Impact.com catalog."""
+    product_id: str
+    name: str
     description: str
-    discount_type: str  # percentage, fixed, free_shipping
-    discount_value: Decimal
-    min_purchase: Optional[Decimal]
-    max_discount: Optional[Decimal]
-    category: Optional[str]
-    tracking_url: str  # affiliate tracking link
-    start_date: Optional[datetime]
-    end_date: Optional[datetime]
-    state: str  # ACTIVE, FUTUREDATE, EXPIRED
+    url: str  # Affiliate tracking URL
+    image_url: str
+    price: Optional[Decimal] = None
+    original_price: Optional[Decimal] = None
+    brand: str = ""
+    category: str = ""
+    campaign_id: str = ""
+    campaign_name: str = ""
+    manufacturer: str = ""
 
 
-# Mapping from Impact program names to our internal retailer keys
-_PROGRAM_NAME_TO_RETAILER = {
-    "home depot": "homedepot",
-    "the home depot": "homedepot",
-    "amazon": "amazon",
-    "amazon.com": "amazon",
-    "walmart": "walmart",
-    "walmart.com": "walmart",
-    "target": "target",
-    "target.com": "target",
-    "best buy": "bestbuy",
-    "bestbuy": "bestbuy",
-    "best buy co inc": "bestbuy",
-    "newegg": "newegg",
-    "newegg.com": "newegg",
-    "costco": "costco",
-    "costco.com": "costco",
-    "ebay": "ebay",
-    "ebay.com": "ebay",
-    "sam's club": "samsclub",
-    "sams club": "samsclub",
-    "samsclub.com": "samsclub",
-    "kohl's": "kohls",
-    "kohls": "kohls",
-    "kohls.com": "kohls",
-    "macy's": "macys",
-    "macys": "macys",
-    "macys.com": "macys",
-    "lowe's": "lowes",
-    "lowes": "lowes",
-    "lowes.com": "lowes",
-    "lowe's companies": "lowes",
-}
+async def fetch_campaigns() -> list[ImpactCampaign]:
+    """Fetch all brand partnership campaigns."""
+    if not _is_configured():
+        logger.info("Impact.com not configured — skipping")
+        return []
 
+    sid = settings.IMPACT_ACCOUNT_SID
+    auth = _get_auth()
+    headers = _get_headers()
+    campaigns: list[ImpactCampaign] = []
 
-def _normalize_retailer(program_name: str) -> str:
-    """Normalize an Impact program name to our internal retailer key."""
-    return _PROGRAM_NAME_TO_RETAILER.get(program_name.lower().strip(), "")
-
-
-def _parse_discount(title: str, description: str) -> tuple[str, Decimal, Optional[Decimal], Optional[Decimal]]:
-    """Parse discount type and value from the coupon title/description.
-    
-    Returns (discount_type, discount_value, min_purchase, max_discount).
-    """
-    text = f"{title} {description}".lower()
-    
-    # Free shipping
-    if "free shipping" in text or "free delivery" in text:
-        return ("free_shipping", Decimal("0"), None, None)
-    
-    # Percentage off — look for patterns like "20% off", "save 25%"
-    import re
-    pct_match = re.search(r'(\d+)\s*%\s*(?:off|discount|save)', text)
-    if pct_match:
-        pct = Decimal(pct_match.group(1))
-        max_disc = Decimal("100") if pct <= 50 else None
-        return ("percentage", pct, None, max_disc)
-    
-    # Fixed amount off — look for patterns like "$25 off", "$50 off orders $250+"
-    fixed_match = re.search(r'\$(\d+)\s*(?:off|discount|save)', text)
-    min_match = re.search(r'(?:orders?|purchase|spend)\s*(?:of\s*)?\$(\d+)', text)
-    if fixed_match:
-        value = Decimal(fixed_match.group(1))
-        min_purchase = Decimal(min_match.group(1)) if min_match else None
-        return ("fixed", value, min_purchase, None)
-    
-    # B1G1 or similar
-    if "b1g1" in text or "buy one get one" in text or "bogo" in text:
-        return ("percentage", Decimal("50"), None, None)
-    
-    # Default: treat as a general promotion
-    return ("percentage", Decimal("0"), None, None)
-
-
-def _parse_date(date_str: str) -> Optional[datetime]:
-    """Parse an Impact date string (ISO 8601)."""
-    if not date_str:
-        return None
     try:
-        return datetime.fromisoformat(date_str.replace("Z", "+00:00")).replace(tzinfo=None)
-    except (ValueError, TypeError):
-        return None
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"{IMPACT_API_BASE}/Mediapartners/{sid}/Campaigns"
+            resp = await client.get(url, auth=auth, headers=headers, params={"PageSize": "100"})
+
+            if resp.status_code != 200:
+                logger.warning(f"Impact campaigns error: {resp.status_code}")
+                return []
+
+            data = resp.json()
+            for c in data.get("Campaigns", []):
+                campaigns.append(ImpactCampaign(
+                    campaign_id=str(c.get("CampaignId", "")),
+                    campaign_name=c.get("CampaignName", ""),
+                    advertiser_name=c.get("AdvertiserName", ""),
+                    advertiser_url=c.get("AdvertiserUrl", ""),
+                    campaign_logo=c.get("CampaignLogoUri", ""),
+                    campaign_description=c.get("CampaignDescription", ""),
+                ))
+
+    except Exception as e:
+        logger.error(f"Impact campaigns fetch failed: {e}")
+
+    logger.info(f"Impact: {len(campaigns)} campaigns")
+    return campaigns
 
 
-def is_configured() -> bool:
-    """Check if Impact API credentials are configured."""
-    return bool(settings.IMPACT_ACCOUNT_SID and settings.IMPACT_AUTH_TOKEN)
+async def fetch_catalogs() -> list[dict]:
+    """Fetch all product catalogs from Impact.com."""
+    if not _is_configured():
+        return []
+
+    sid = settings.IMPACT_ACCOUNT_SID
+    auth = _get_auth()
+    headers = _get_headers()
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"{IMPACT_API_BASE}/Mediapartners/{sid}/Catalogs"
+            resp = await client.get(url, auth=auth, headers=headers, params={"PageSize": "100"})
+
+            if resp.status_code != 200:
+                logger.warning(f"Impact catalogs error: {resp.status_code}")
+                return []
+
+            data = resp.json()
+            catalogs = data.get("Catalogs", [])
+            logger.info(f"Impact: {len(catalogs)} catalogs")
+            return catalogs
+
+    except Exception as e:
+        logger.error(f"Impact catalogs fetch failed: {e}")
+        return []
 
 
-async def fetch_promo_codes(
-    program_ids: Optional[list[str]] = None,
-    page_size: int = 100,
-    max_pages: int = 10,
-) -> list[ImpactPromoCode]:
-    """Fetch real promo codes from the Impact API.
-    
+async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 1) -> list[ImpactProduct]:
+    """Fetch products from a specific catalog.
+
     Args:
-        program_ids: Optional list of Impact program IDs to filter by.
-                     If None, fetches from all approved programs.
-        page_size: Number of results per page (max 1000 per Impact docs).
-        max_pages: Maximum number of pages to fetch (safety limit).
-    
+        catalog_id: The Impact.com catalog ID.
+        page_size: Number of items per page (max 100).
+        page: Page number (1-based).
+
     Returns:
-        List of ImpactPromoCode objects with real, active promo codes.
-    
-    Raises:
-        RuntimeError: If Impact credentials are not configured.
-        httpx.HTTPError: If the API request fails.
+        List of ImpactProduct objects.
     """
-    if not is_configured():
-        raise RuntimeError(
-            "Impact API not configured. Set IMPACT_ACCOUNT_SID and IMPACT_AUTH_TOKEN."
-        )
-    
-    auth = (settings.IMPACT_ACCOUNT_SID, settings.IMPACT_AUTH_TOKEN)
-    
-    # Build program ID filter
-    program_filter = ""
-    if program_ids:
-        program_filter = ",".join(program_ids)
-    
-    # Also check env var for program IDs
-    if not program_ids and settings.IMPACT_PROGRAM_IDS:
-        program_ids = [p.strip() for p in settings.IMPACT_PROGRAM_IDS.split(",") if p.strip()]
-        program_filter = ",".join(program_ids)
-    
-    all_promos: list[ImpactPromoCode] = []
-    
-    async with httpx.AsyncClient(auth=auth, timeout=30.0) as client:
-        for page in range(1, max_pages + 1):
-            params = {
+    if not _is_configured():
+        return []
+
+    sid = settings.IMPACT_ACCOUNT_SID
+    auth = _get_auth()
+    headers = _get_headers()
+    products: list[ImpactProduct] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"{IMPACT_API_BASE}/Mediapartners/{sid}/Catalogs/{catalog_id}/Items"
+            resp = await client.get(url, auth=auth, headers=headers, params={
                 "PageSize": str(page_size),
                 "Page": str(page),
-                "State": "ACTIVE",  # Only active promo codes
-            }
-            if program_filter:
-                params["ProgramId"] = program_filter
-            
-            try:
-                response = await client.get(
-                    f"{IMPACT_API_BASE}{IMPACT_PROMO_CODES_ENDPOINT}",
-                    params=params,
-                )
-                response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Impact API error: {e.response.status_code} — {e.response.text}")
-                break
-            except httpx.HTTPError as e:
-                logger.error(f"Impact API request failed: {e}")
-                break
-            
-            data = response.json()
-            promos = data.get("@items", [])
-            total = data.get("@total", 0)
-            
-            for promo in promos:
-                promo_code = _parse_promo_code(promo)
-                if promo_code:
-                    all_promos.append(promo_code)
-            
-            logger.info(f"Impact API page {page}: got {len(promos)} promos (total: {total})")
-            
-            # Check if we've fetched everything
-            if len(promos) < page_size or len(all_promos) >= total:
-                break
-    
-    logger.info(f"Fetched {len(all_promos)} active promo codes from Impact")
-    return all_promos
+            })
 
+            if resp.status_code != 200:
+                logger.warning(f"Impact catalog {catalog_id} items error: {resp.status_code}")
+                return []
 
-def _parse_promo_code(raw: dict) -> Optional[ImpactPromoCode]:
-    """Parse a raw Impact API promo code response into our dataclass."""
-    try:
-        code = raw.get("Code", "")
-        if not code:
-            return None
-        
-        program = raw.get("Program", {})
-        program_name = program.get("Name", "")
-        retailer = _normalize_retailer(program_name)
-        
-        # Skip coupons from retailers we don't support
-        if not retailer:
-            logger.debug(f"Skipping promo from unsupported program: {program_name}")
-            return None
-        
-        deal = raw.get("Deal", {})
-        title = deal.get("Name", "") or deal.get("Description", "") or "Promo Code"
-        description = deal.get("Description", "") or ""
-        
-        discount_type, discount_value, min_purchase, max_discount = _parse_discount(title, description)
-        
-        # Get the affiliate tracking URL
-        tracking_url = raw.get("TrackingUrl", "") or deal.get("Url", "") or ""
-        
-        # Parse dates
-        start_date = _parse_date(raw.get("StartDate", ""))
-        end_date = _parse_date(raw.get("EndDate", ""))
-        state = raw.get("State", "ACTIVE")
-        
-        return ImpactPromoCode(
-            code=code,
-            program_name=program_name,
-            retailer=retailer,
-            title=title,
-            description=description,
-            discount_type=discount_type,
-            discount_value=discount_value,
-            min_purchase=min_purchase,
-            max_discount=max_discount,
-            category=None,  # Impact doesn't provide a category field directly
-            tracking_url=tracking_url,
-            start_date=start_date,
-            end_date=end_date,
-            state=state,
-        )
+            data = resp.json()
+            for item in data.get("Items", []):
+                # Parse price
+                price = None
+                price_str = item.get("Price", "")
+                if price_str:
+                    try:
+                        price = Decimal(str(price_str))
+                    except Exception:
+                        pass
+
+                # Parse original/sale price
+                original_price = None
+                sale_price_str = item.get("SalePrice", "")
+                if sale_price_str:
+                    try:
+                        sale_price = Decimal(str(sale_price_str))
+                        if price and sale_price < price:
+                            original_price = price
+                            price = sale_price
+                    except Exception:
+                        pass
+
+                # Get image
+                image_url = ""
+                images = item.get("Images", [])
+                if images and isinstance(images, list):
+                    image_url = images[0].get("Url", "") if isinstance(images[0], dict) else ""
+                if not image_url:
+                    image_url = item.get("ImageUrl", "")
+
+                products.append(ImpactProduct(
+                    product_id=item.get("Id", ""),
+                    name=item.get("Name", "")[:500],
+                    description=item.get("Description", "")[:1000],
+                    url=item.get("Url", ""),
+                    image_url=image_url,
+                    price=price,
+                    original_price=original_price,
+                    brand=item.get("Brand", ""),
+                    category=item.get("Category", ""),
+                    campaign_id=str(item.get("CampaignId", "")),
+                    campaign_name=item.get("CampaignName", ""),
+                    manufacturer=item.get("Manufacturer", ""),
+                ))
+
     except Exception as e:
-        logger.warning(f"Failed to parse Impact promo code: {e}")
-        return None
+        logger.error(f"Impact catalog items fetch failed: {e}")
+
+    return products
+
+
+async def fetch_discounted_products(min_discount: int = 40, max_products: int = 50) -> list[ImpactProduct]:
+    """Fetch products with discounts from Impact.com catalogs.
+
+    Scans smaller catalogs for products with sale prices, filtering to
+    those with at least min_discount% off.
+
+    Args:
+        min_discount: Minimum discount percentage.
+        max_products: Maximum number of products to return.
+
+    Returns:
+        List of discounted ImpactProduct objects.
+    """
+    if not _is_configured():
+        return []
+
+    # Get catalogs, prefer smaller ones (faster to scan)
+    catalogs = await fetch_catalogs()
+    if not catalogs:
+        return []
+
+    # Sort by number of items (smallest first) and skip huge catalogs
+    sorted_catalogs = sorted(catalogs, key=lambda c: int(c.get("NumberOfItems", 0) or 0))
+    target_catalogs = [c for c in sorted_catalogs if int(c.get("NumberOfItems", 0) or 0) <= 5000][:20]
+
+    all_products: list[ImpactProduct] = []
+    for catalog in target_catalogs:
+        if len(all_products) >= max_products:
+            break
+
+        catalog_id = catalog.get("Id", "")
+        if not catalog_id:
+            continue
+
+        items = await fetch_catalog_items(catalog_id, page_size=50)
+        for item in items:
+            if item.original_price and item.price and item.original_price > item.price:
+                discount = int(round((1 - float(item.price) / float(item.original_price)) * 100))
+                if discount >= min_discount:
+                    all_products.append(item)
+                    if len(all_products) >= max_products:
+                        break
+
+    logger.info(f"Impact: {len(all_products)} discounted products found")
+    return all_products
+
+
+async def fetch_all_impact_deals() -> list[dict]:
+    """Fetch all deals from Impact.com — campaigns, products, and catalogs.
+
+    Returns a list of deal dictionaries ready for the API.
+    """
+    if not _is_configured():
+        return []
+
+    products = await fetch_discounted_products(min_discount=40, max_products=50)
+
+    deals = []
+    for product in products:
+        discount = 0
+        if product.original_price and product.price and product.original_price > product.price:
+            discount = int(round((1 - float(product.price) / float(product.original_price)) * 100))
+
+        deals.append({
+            "title": product.name,
+            "deal_url": product.url,
+            "image_url": product.image_url,
+            "deal_price": float(product.price) if product.price else None,
+            "original_price": float(product.original_price) if product.original_price else None,
+            "discount_percent": discount,
+            "retailer": _normalize_retailer(product.campaign_name),
+            "network": "impact",
+            "campaign_id": product.campaign_id,
+        })
+
+    logger.info(f"Impact: returning {len(deals)} deals")
+    return deals
+
+
+def _normalize_retailer(campaign_name: str) -> str:
+    """Normalize campaign name to retailer key."""
+    name_lower = campaign_name.lower()
+    if "walmart" in name_lower:
+        return "walmart"
+    if "eufy" in name_lower:
+        return "eufy"
+    if "belkin" in name_lower:
+        return "belkin"
+    if "lenovo" in name_lower:
+        return "lenovo"
+    if "canva" in name_lower:
+        return "canva"
+    if "abebooks" in name_lower:
+        return "abebooks"
+    if "bark" in name_lower:
+        return "barkbox"
+    if "golf" in name_lower:
+        return "golf_partner"
+    if "umbra" in name_lower:
+        return "umbra"
+    if "wine" in name_lower:
+        return "wine_express"
+    if "namecheap" in name_lower:
+        return "namecheap"
+    if "envato" in name_lower:
+        return "envato"
+    if "invideo" in name_lower:
+        return "invideo"
+    return name_lower.replace(" ", "_").replace("affiliate", "").strip("_")[:30]

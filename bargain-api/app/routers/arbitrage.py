@@ -245,6 +245,59 @@ async def scrape_all_deals_public(
             "message": "No affiliate networks configured. Sign up at Rakuten, Awin, or CJ Affiliate."
         }
 
+    # Impact.com products (if configured)
+    from app.services.impact_api import fetch_all_impact_deals, _is_configured as impact_configured
+    if impact_configured():
+        try:
+            impact_deals = await fetch_all_impact_deals()
+            impact_saved = 0
+            for deal in impact_deals:
+                try:
+                    deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
+                    existing = db.query(ArbitrageDeal).filter(ArbitrageDeal.asin == deal_id).first()
+                    if existing:
+                        continue
+
+                    orig = deal.get("original_price") or 0
+                    buy = deal.get("deal_price") or 0
+                    if not buy:
+                        continue
+
+                    tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
+                    new_deal = ArbitrageDeal(
+                        asin=deal_id,
+                        title=deal.get("title", "")[:500],
+                        image_url=deal.get("image_url"),
+                        buy_url=deal.get("deal_url"),
+                        buy_platform=deal.get("retailer", "unknown"),
+                        retailer=deal.get("retailer", "unknown"),
+                        deal_source="online",
+                        buy_price=buy,
+                        sell_platform="impact",
+                        sell_price=orig if orig else buy,
+                        historical_avg=orig if orig else buy,
+                        deal_tier=tier,
+                        net_profit=(orig - buy) if orig else 0,
+                        roi=float((orig - buy) / orig) if orig and orig > 0 else 0,
+                        is_profitable=True,
+                        status="active",
+                        detected_at=datetime.utcnow(),
+                    )
+                    db.add(new_deal)
+                    db.commit()
+                    impact_saved += 1
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Failed to save Impact deal: {e}")
+
+            results["sources"]["impact"] = {
+                "found": len(impact_deals),
+                "saved": impact_saved,
+            }
+            results["total_saved"] += impact_saved
+        except Exception as e:
+            results["sources"]["impact"] = {"error": str(e)}
+
     # Auto-post new deals to X via Make.com (if configured)
     from app.services.x_poster import is_configured as x_configured
     if x_configured():

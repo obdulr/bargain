@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     # Set this to the webhook URL from Make.com
     MAKE_WEBHOOK_URL: str = ""
 
+    # Impact.com Affiliate API
+    IMPACT_ACCOUNT_SID: str = ""
+    IMPACT_AUTH_TOKEN: str = ""
+
     # Affiliate Network Credentials
     # Rakuten Advertising (https://pubhelp.rakutenadvertising.com)
     RAKUTEN_WEBSERVICES_TOKEN: str = ""
