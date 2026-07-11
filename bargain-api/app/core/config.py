@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     X_ACCESS_TOKEN: str = ""
     X_ACCESS_TOKEN_SECRET: str = ""
 
+    # Make.com webhook URL for X auto-posting via Buffer
+    # Create a scenario: Webhook → Buffer → X
+    # Set this to the webhook URL from Make.com
+    MAKE_WEBHOOK_URL: str = ""
+
     # Affiliate Network Credentials
     # Rakuten Advertising (https://pubhelp.rakutenadvertising.com)
     RAKUTEN_WEBSERVICES_TOKEN: str = ""

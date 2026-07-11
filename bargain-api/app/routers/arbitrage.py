@@ -245,6 +245,50 @@ async def scrape_all_deals_public(
             "message": "No affiliate networks configured. Sign up at Rakuten, Awin, or CJ Affiliate."
         }
 
+    # Auto-post new deals to X via Make.com (if configured)
+    from app.services.x_poster import is_configured as x_configured
+    if x_configured():
+        try:
+            # Find deals not yet posted to X
+            new_deals = (
+                db.query(ArbitrageDeal)
+                .filter(
+                    ArbitrageDeal.status == "active",
+                    ArbitrageDeal.is_profitable == True,
+                    ArbitrageDeal.alerted_at == None,
+                )
+                .order_by(ArbitrageDeal.detected_at.desc())
+                .limit(3)
+                .all()
+            )
+            if new_deals:
+                from app.services.x_poster import post_deal_to_x
+                posted = 0
+                for deal in new_deals:
+                    discount = 0
+                    if deal.historical_avg and deal.historical_avg > deal.buy_price:
+                        discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+                    result = await post_deal_to_x(
+                        title=deal.title,
+                        deal_price=float(deal.buy_price),
+                        original_price=float(deal.historical_avg) if deal.historical_avg else None,
+                        discount_percent=discount,
+                        retailer=getattr(deal, "retailer", None) or "amazon",
+                        deal_url=deal.buy_url or "",
+                        deal_tier=deal.deal_tier,
+                        image_url=deal.image_url,
+                    )
+                    if result.get("status") == "success":
+                        posted += 1
+                        deal.alerted_at = datetime.utcnow()
+                        db.commit()
+                results["x_posted"] = posted
+            else:
+                results["x_posted"] = 0
+        except Exception as e:
+            results["x_posted"] = 0
+            results["x_error"] = str(e)
+
     return results
 
 
@@ -281,15 +325,15 @@ async def post_deal_to_x_public(
 ):
     """Post a specific deal to X (@bargain4huntrs) — no auth required.
 
-    Formats the deal as a tweet with discount %, price, and affiliate link,
-    then posts it to the @bargain4huntrs X account via Chrome automation.
+    Sends the deal to Make.com webhook, which posts it to X via Buffer.
+    Runs 24/7 on the server — no computer or browser needed.
     """
-    from app.services.x_browser_poster import post_deal_to_x, is_configured
+    from app.services.x_poster import post_deal_to_x, is_configured
 
     if not is_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X browser automation not configured. Requires Chrome with Profile 10.",
+            detail="X posting not configured. Set MAKE_WEBHOOK_URL env var.",
         )
 
     deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
@@ -320,21 +364,20 @@ async def post_deal_to_x_public(
 
 @router.post("/deals/post-new-to-x/public", response_model=dict)
 async def post_new_deals_to_x_public(
-    max_posts: int = Query(3, le=5),
+    max_posts: int = Query(5, le=10),
     db: Session = Depends(get_db),
 ):
     """Post deals that haven't been posted to X yet — no auth required.
 
-    Finds active deals where alerted_at is NULL, posts them to X via
-    Chrome automation, and marks them as alerted. Limits to max_posts
-    to avoid timeout (each post takes ~30s via browser).
+    Sends new deals to Make.com webhook for X posting via Buffer.
+    Runs 24/7 on the server. Limits to max_posts per call.
     """
-    from app.services.x_browser_poster import post_deal_to_x, is_configured
+    from app.services.x_poster import post_deal_to_x, is_configured
 
     if not is_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X browser automation not configured.",
+            detail="X posting not configured. Set MAKE_WEBHOOK_URL env var.",
         )
 
     deals_to_post = (
@@ -377,7 +420,7 @@ async def post_new_deals_to_x_public(
             results.append({
                 "deal_id": str(deal.id),
                 "title": deal.title[:60],
-                "tweet_url": result.get("url"),
+                "tweet_text": result.get("tweet_text", "")[:100],
             })
         else:
             results.append({

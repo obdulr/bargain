@@ -29,16 +29,23 @@ logger = logging.getLogger(__name__)
 
 
 class ScanScheduler:
-    """Background asyncio task scheduler for periodic arbitrage scans."""
+    """Background asyncio task scheduler for periodic arbitrage scans.
+
+    Also runs a deal scraping + X posting task every 2 hours that:
+    1. Scrapes Amazon Gold Box + RSS feeds for new deals
+    2. Posts the top deals to X via Make.com webhook (runs 24/7, no computer needed)
+    """
 
     def __init__(self, interval_minutes: int = None):
         self.interval_minutes = interval_minutes or settings.SCAN_INTERVAL_MINUTES
         self._task: Optional[asyncio.Task] = None
+        self._deal_task: Optional[asyncio.Task] = None
         self._running = False
         self._last_scan_at: Optional[datetime] = None
         self._next_scan_at: Optional[datetime] = None
         self._last_scan_status: str = "never"
         self._last_error: Optional[str] = None
+        self._last_deal_scrape_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:
@@ -65,6 +72,7 @@ class ScanScheduler:
             "next_scan_at": self._next_scan_at.isoformat() if self._next_scan_at else None,
             "last_scan_status": self._last_scan_status,
             "last_error": self._last_error,
+            "last_deal_scrape_at": self._last_deal_scrape_at.isoformat() if self._last_deal_scrape_at else None,
         }
 
     def start(self) -> bool:
@@ -75,7 +83,9 @@ class ScanScheduler:
 
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        logger.info(f"Scan scheduler started (interval: {self.interval_minutes}min)")
+        # Start the deal scraping + X posting loop (every 2 hours)
+        self._deal_task = asyncio.create_task(self._run_deal_scrape_loop())
+        logger.info(f"Scan scheduler started (interval: {self.interval_minutes}min, deal scrape: every 120min)")
         return True
 
     def stop(self) -> bool:
@@ -87,6 +97,8 @@ class ScanScheduler:
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
+        if self._deal_task and not self._deal_task.done():
+            self._deal_task.cancel()
         self._next_scan_at = None
         logger.info("Scan scheduler stopped")
         return True
@@ -116,6 +128,109 @@ class ScanScheduler:
 
         logger.info("Scheduler loop ended")
         self._next_scan_at = None
+
+    async def _run_deal_scrape_loop(self):
+        """Background loop that scrapes deals and posts to X every 2 hours.
+
+        1. Scrapes Amazon Gold Box + RSS feeds (Slickdeals, TechBargains, etc.)
+        2. Posts top 3 new deals to X via Make.com webhook
+        3. Runs completely on the server — no computer or browser needed
+        """
+        DEAL_SCRAPE_INTERVAL = 120  # minutes
+        logger.info("Deal scrape + X posting loop started (every 120min)")
+
+        while self._running:
+            try:
+                await self._scrape_and_post_to_x()
+            except Exception as e:
+                logger.error(f"Deal scrape loop error: {e}", exc_info=True)
+
+            # Wait for next interval
+            try:
+                await asyncio.sleep(DEAL_SCRAPE_INTERVAL * 60)
+            except asyncio.CancelledError:
+                logger.info("Deal scrape loop cancelled")
+                break
+
+    async def _scrape_and_post_to_x(self):
+        """Scrape deals from all sources and post new ones to X via Make.com."""
+        self._last_deal_scrape_at = datetime.utcnow()
+        logger.info("Starting deal scrape + X posting cycle...")
+
+        from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
+        from app.services.rss_deals_scraper import scrape_all_rss_feeds, save_rss_deals_to_database
+        from app.services.x_poster import post_deal_to_x, is_configured as x_configured
+
+        db = SessionLocal()
+        try:
+            # Scrape Amazon Gold Box
+            try:
+                amazon_deals = await scrape_amazon_deals(max_deals=50)
+                amazon_saved = save_deals_to_database(amazon_deals, db)
+                logger.info(f"Amazon: {len(amazon_deals)} found, {amazon_saved} saved")
+            except Exception as e:
+                logger.error(f"Amazon scrape failed: {e}")
+
+            # Scrape RSS feeds
+            try:
+                rss_deals = await scrape_all_rss_feeds(min_discount=40)
+                rss_saved = save_rss_deals_to_database(rss_deals, db)
+                logger.info(f"RSS: {len(rss_deals)} found, {rss_saved} saved")
+            except Exception as e:
+                logger.error(f"RSS scrape failed: {e}")
+
+            # Post new deals to X via Make.com
+            if x_configured():
+                new_deals = (
+                    db.query(ArbitrageDeal)
+                    .filter(
+                        ArbitrageDeal.status == "active",
+                        ArbitrageDeal.is_profitable == True,
+                        ArbitrageDeal.alerted_at == None,
+                    )
+                    .order_by(ArbitrageDeal.detected_at.desc())
+                    .limit(3)
+                    .all()
+                )
+
+                if new_deals:
+                    logger.info(f"Posting {len(new_deals)} deals to X via Make.com")
+                    posted = 0
+                    for deal in new_deals:
+                        discount = 0
+                        if deal.historical_avg and deal.historical_avg > deal.buy_price:
+                            discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+                        result = await post_deal_to_x(
+                            title=deal.title,
+                            deal_price=float(deal.buy_price),
+                            original_price=float(deal.historical_avg) if deal.historical_avg else None,
+                            discount_percent=discount,
+                            retailer=getattr(deal, "retailer", None) or "amazon",
+                            deal_url=deal.buy_url or "",
+                            deal_tier=deal.deal_tier,
+                            image_url=deal.image_url,
+                        )
+
+                        if result.get("status") == "success":
+                            posted += 1
+                            deal.alerted_at = datetime.utcnow()
+                            db.commit()
+                            logger.info(f"  Posted to X: {deal.title[:50]}")
+                        else:
+                            logger.warning(f"  X post failed: {result.get('error')}")
+
+                        # Small delay between posts
+                        await asyncio.sleep(5)
+
+                    logger.info(f"X posting complete: {posted}/{len(new_deals)} posted")
+                else:
+                    logger.info("No new deals to post to X")
+            else:
+                logger.info("X posting not configured (MAKE_WEBHOOK_URL not set)")
+
+        finally:
+            db.close()
 
     async def _run_scan(self):
         """Run a single scan cycle."""

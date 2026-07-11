@@ -1,23 +1,19 @@
-"""X (Twitter) Auto-Posting via Chrome Browser Automation.
+"""X (Twitter) Auto-Posting via Chrome (Silent/Headless).
 
-Posts deals to the @bargain4huntrs X account by automating the X web
-interface using Chrome with CDP (Chrome DevTools Protocol). This avoids
-the X API's pay-per-use costs ($0.20 per post with a link).
+Uses a dedicated Chrome profile that stays logged in to @bargain4huntrs.
+The first run requires a one-time manual login (visible browser).
+All subsequent runs are headless and completely silent — no browser
+window appears, no screen interruption.
 
-The approach:
-1. Copy the user's Chrome profile (Profile 10 / Prime) to a temp dir
-2. Launch Chrome with remote debugging on port 9222
-3. Connect via Playwright CDP
-4. Navigate to X, compose and post the tweet
-5. Clean up the temp profile
+Profile setup:
+    python -m app.services.x_browser_poster --login
 
-This runs locally on the dev machine. For production, it would need
-to run on a server with Chrome installed and an active X session.
+This opens Chrome once for you to log in to X. After that, all
+posting is done silently in the background.
 """
 import asyncio
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -26,9 +22,9 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CHROME_USER_DATA = os.path.expanduser("~/Library/Application Support/Google/Chrome")
-SOURCE_PROFILE = os.path.join(CHROME_USER_DATA, "Profile 10")
-DEBUG_PORT = 9222
+# Dedicated profile for X posting — separate from user's personal Chrome
+X_PROFILE_DIR = os.path.expanduser("~/.bargainhuntrs/x_chrome_profile")
+DEBUG_PORT = 9223  # Different port to avoid conflicts
 
 
 @dataclass
@@ -61,6 +57,8 @@ def _format_deal_tweet(
         "lowes": "Lowe's",
         "ace_hardware": "Ace Hardware",
         "corsair": "Corsair",
+        "overstock": "Overstock",
+        "bhphoto": "B&H Photo",
     }
     retailer_name = retailer_names.get(retailer, retailer.replace("_", " ").title())
 
@@ -98,56 +96,141 @@ def _format_deal_tweet(
 
 
 def is_configured() -> bool:
-    """Check if Chrome and the profile exist."""
-    return os.path.exists(CHROME_PATH) and os.path.exists(SOURCE_PROFILE)
+    """Check if the dedicated X profile exists (i.e., login has been done)."""
+    return os.path.exists(os.path.join(X_PROFILE_DIR, "Default", "Cookies")) or \
+           os.path.exists(os.path.join(X_PROFILE_DIR, "Default", "Network", "Cookies"))
 
 
-async def post_tweet_via_chrome(tweet_text: str) -> XPostResult:
-    """Post a tweet using Chrome browser automation via CDP."""
+async def login_interactive() -> bool:
+    """One-time login: opens Chrome visibly so you can log in to X.
+
+    After logging in, the session is saved to the dedicated profile.
+    All future posts use this profile in headless mode (no visible window).
+    """
     from playwright.async_api import async_playwright
 
-    if not is_configured():
-        return XPostResult(success=False, error="Chrome or profile not found")
+    os.makedirs(X_PROFILE_DIR, exist_ok=True)
 
-    # Create temp profile
-    temp_dir = tempfile.mkdtemp(prefix="chrome_x_")
-    temp_profile = os.path.join(temp_dir, "Profile 10")
-
-    try:
-        shutil.copytree(
-            SOURCE_PROFILE,
-            temp_profile,
-            ignore=shutil.ignore_patterns(
-                "Cache*", "Code Cache", "GPUCache", "Service Worker",
-                "Storage", "IndexedDB", "blob_storage", "File System",
-            ),
-            dirs_exist_ok=True,
-        )
-    except Exception as e:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return XPostResult(success=False, error=f"Failed to copy profile: {e}")
-
-    # Kill any existing Chrome with debugging
-    subprocess.run(["pkill", "-f", "remote-debugging-port"], capture_output=True)
+    # Kill any Chrome using our debug port
+    subprocess.run(["pkill", "-f", f"remote-debugging-port={DEBUG_PORT}"],
+                   capture_output=True)
     await asyncio.sleep(1)
 
-    # Launch Chrome with remote debugging
+    # Launch Chrome with remote debugging using the dedicated profile
     chrome_proc = subprocess.Popen(
         [
             CHROME_PATH,
             f"--remote-debugging-port={DEBUG_PORT}",
-            f"--user-data-dir={temp_dir}",
-            "--profile-directory=Profile 10",
+            f"--user-data-dir={X_PROFILE_DIR}",
             "--no-first-run",
             "--disable-blink-features=AutomationControlled",
-            "https://x.com/home",
+            "https://x.com/login",
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
+    print("Chrome opened — log in to @bargain4huntrs in the browser window.")
+    print("You have 3 minutes. The session will be saved automatically.")
+    print()
+
     try:
-        await asyncio.sleep(12)
+        async with async_playwright() as p:
+            # Wait for Chrome to start
+            await asyncio.sleep(8)
+
+            browser = await p.chromium.connect_over_cdp(f"http://127.0.0.1:{DEBUG_PORT}")
+            context = browser.contexts[0] if browser.contexts else None
+            if not context:
+                print("No browser context found")
+                return False
+
+            page = context.pages[0] if context.pages else await context.new_page()
+
+            # Wait for login (up to 3 minutes)
+            logged_in = False
+            for i in range(36):
+                await asyncio.sleep(5)
+                try:
+                    compose = await page.query_selector('a[data-testid="SideNav_NewTweet_Button"]')
+                    if compose:
+                        logged_in = True
+                        print(f"\nLogin detected after {(i+1)*5}s! Session saved.")
+                        break
+                    if "x.com/home" in page.url:
+                        logged_in = True
+                        print(f"\nLogin detected (home page) after {(i+1)*5}s! Session saved.")
+                        break
+                    print(f"  Waiting for login... ({(i+1)*5}s)")
+                except Exception:
+                    print(f"  Waiting... ({(i+1)*5}s)")
+
+            if not logged_in:
+                print("\nLogin not detected — saving profile anyway.")
+
+            # Close browser connection (profile is auto-saved by Chrome)
+            return True
+
+    finally:
+        chrome_proc.terminate()
+        try:
+            chrome_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            chrome_proc.kill()
+
+
+async def post_tweet_via_chrome(tweet_text: str, headless: bool = True) -> XPostResult:
+    """Post a tweet using the dedicated X Chrome profile.
+
+    Args:
+        tweet_text: The tweet text to post.
+        headless: If True, runs completely invisibly (no browser window).
+                  If False, shows the browser window (for debugging).
+
+    Returns:
+        XPostResult with success status and tweet URL.
+    """
+    from playwright.async_api import async_playwright
+
+    if not is_configured():
+        return XPostResult(
+            success=False,
+            error="X profile not found. Run: python -m app.services.x_browser_poster --login",
+        )
+
+    # Kill any Chrome using our debug port
+    subprocess.run(["pkill", "-f", f"remote-debugging-port={DEBUG_PORT}"],
+                   capture_output=True)
+    await asyncio.sleep(1)
+
+    # Launch Chrome with remote debugging
+    # In headless mode, Chrome runs without any visible window
+    chrome_args = [
+        CHROME_PATH,
+        f"--remote-debugging-port={DEBUG_PORT}",
+        f"--user-data-dir={X_PROFILE_DIR}",
+        "--no-first-run",
+        "--disable-blink-features=AutomationControlled",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-popup-blocking",
+    ]
+
+    if headless:
+        chrome_args.append("--headless=new")
+        chrome_args.append("--window-size=1280,800")
+
+    chrome_args.append("https://x.com/home")
+
+    chrome_proc = subprocess.Popen(
+        chrome_args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    try:
+        # Wait for Chrome to start and load X
+        await asyncio.sleep(10 if headless else 8)
 
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(f"http://127.0.0.1:{DEBUG_PORT}")
@@ -164,6 +247,7 @@ async def post_tweet_via_chrome(tweet_text: str) -> XPostResult:
             if not page:
                 page = pages[0] if pages else await contexts[0].new_page()
 
+            # Wait for X to load
             await asyncio.sleep(5)
 
             # Check if logged in
@@ -173,7 +257,10 @@ async def post_tweet_via_chrome(tweet_text: str) -> XPostResult:
                 compose = await page.query_selector('a[data-testid="SideNav_NewTweet_Button"]')
 
             if not compose:
-                return XPostResult(success=False, error="Not logged in to X")
+                return XPostResult(
+                    success=False,
+                    error="Not logged in. Run: python -m app.services.x_browser_poster --login",
+                )
 
             # Compose tweet
             await compose.click()
@@ -228,7 +315,6 @@ async def post_tweet_via_chrome(tweet_text: str) -> XPostResult:
             chrome_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             chrome_proc.kill()
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 async def post_deal_to_x(
@@ -241,7 +327,10 @@ async def post_deal_to_x(
     deal_tier: str = "clearance",
     image_url: Optional[str] = None,
 ) -> dict:
-    """Format a deal as a tweet and post it to X via Chrome automation."""
+    """Format a deal as a tweet and post it to X silently (headless).
+
+    No browser window appears. Runs completely in the background.
+    """
     tweet_text = _format_deal_tweet(
         title=title,
         deal_price=deal_price,
@@ -252,7 +341,7 @@ async def post_deal_to_x(
         deal_tier=deal_tier,
     )
 
-    result = await post_tweet_via_chrome(tweet_text)
+    result = await post_tweet_via_chrome(tweet_text, headless=True)
 
     if result.success:
         return {
@@ -266,3 +355,29 @@ async def post_deal_to_x(
             "error": result.error,
             "tweet_text": result.tweet_text,
         }
+
+
+if __name__ == "__main__":
+    import sys
+
+    if "--login" in sys.argv:
+        # One-time login (visible browser)
+        print("Starting one-time X login...")
+        asyncio.run(login_interactive())
+    elif "--test" in sys.argv:
+        # Test post (headless)
+        print("Posting test tweet (headless)...")
+        result = asyncio.run(post_deal_to_x(
+            title="Test Deal — Samsung Galaxy Buds2 Pro",
+            deal_price=99.99,
+            original_price=199.99,
+            discount_percent=50,
+            retailer="amazon",
+            deal_url="https://www.amazon.com/dp/B0BPYPZ953?tag=bargain0ae-20",
+            deal_tier="clearance",
+        ))
+        print(result)
+    else:
+        print("Usage:")
+        print("  python -m app.services.x_browser_poster --login   # One-time login (visible)")
+        print("  python -m app.services.x_browser_poster --test    # Test post (headless)")
