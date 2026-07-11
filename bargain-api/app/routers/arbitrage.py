@@ -6,6 +6,7 @@ Endpoints for scanning, viewing, and managing arbitrage opportunities.
 
 from decimal import Decimal
 import asyncio
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -24,6 +25,8 @@ from app.services.arbitrage import (
 )
 from app.services.profit_calculator import Platform
 from app.services.niche_service import get_niche, get_all_niches
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/arbitrage", tags=["arbitrage"])
 
