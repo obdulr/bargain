@@ -17,7 +17,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-BUFFER_API_URL = "https://graph.buffer.com/graphql"
+BUFFER_API_URL = "https://api.buffer.com/graphql"
 
 
 def is_configured() -> bool:
