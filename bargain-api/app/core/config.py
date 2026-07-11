@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     # Set this to the webhook URL from Make.com
     MAKE_WEBHOOK_URL: str = ""
 
+    # Buffer API for direct X posting (preferred over Make.com)
+    BUFFER_API_KEY: str = ""
+    BUFFER_CHANNEL_ID: str = ""
+
     # Impact.com Affiliate API
     IMPACT_ACCOUNT_SID: str = ""
     IMPACT_AUTH_TOKEN: str = ""

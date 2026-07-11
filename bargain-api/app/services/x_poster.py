@@ -1,16 +1,11 @@
-"""Make.com Webhook Integration for X Auto-Posting.
+"""Buffer API Integration for X Auto-Posting.
 
-Sends deal tweets to a Make.com webhook, which then posts them to X
-via Buffer. This runs 24/7 on our Railway server — no computer or
-browser needed.
-
-Setup:
-1. Create a Make.com scenario: Webhook → Buffer → X
-2. Set the webhook URL as env var: MAKE_WEBHOOK_URL
-3. The API automatically sends new deals to the webhook
+Posts deals directly to Buffer, which posts them to X (@bargain4huntrs).
+Runs 24/7 on the Railway server — no computer, browser, or Make.com needed.
 
 Env vars:
-  MAKE_WEBHOOK_URL — The Make.com webhook URL
+  BUFFER_API_KEY     — Buffer API access token
+  BUFFER_CHANNEL_ID  — Buffer channel ID for X account
 """
 import asyncio
 import logging
@@ -22,10 +17,13 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+BUFFER_API_URL = "https://graph.buffer.com/graphql"
+
 
 def is_configured() -> bool:
-    """Check if Make.com webhook URL is configured."""
-    return bool(getattr(settings, "MAKE_WEBHOOK_URL", ""))
+    """Check if Buffer API is configured."""
+    return bool(getattr(settings, "BUFFER_API_KEY", "")) and \
+           bool(getattr(settings, "BUFFER_CHANNEL_ID", ""))
 
 
 def _format_deal_tweet(
@@ -52,6 +50,11 @@ def _format_deal_tweet(
         "corsair": "Corsair",
         "overstock": "Overstock",
         "bhphoto": "B&H Photo",
+        "ador": "ADOR",
+        "eufy": "Eufy",
+        "belkin": "Belkin",
+        "lenovo": "Lenovo",
+        "woot": "Woot",
     }
     retailer_name = retailer_names.get(retailer, retailer.replace("_", " ").title())
 
@@ -88,58 +91,77 @@ def _format_deal_tweet(
     return tweet
 
 
-async def send_deal_to_make(
-    title: str,
-    deal_price: float,
-    original_price: Optional[float],
-    discount_percent: int,
-    retailer: str,
-    deal_url: str,
-    deal_tier: str = "clearance",
-    image_url: Optional[str] = None,
-) -> dict:
-    """Send a deal to Make.com webhook for X posting via Buffer.
+async def post_to_buffer(tweet_text: str) -> dict:
+    """Post a tweet to Buffer via GraphQL API.
 
-    Returns dict with status and tweet text.
+    Buffer will post it to X (@bargain4huntrs) automatically.
     """
     if not is_configured():
-        return {"status": "error", "error": "MAKE_WEBHOOK_URL not configured"}
+        return {"status": "error", "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set"}
 
-    tweet_text = _format_deal_tweet(
-        title=title,
-        deal_price=deal_price,
-        original_price=original_price,
-        discount_percent=discount_percent,
-        retailer=retailer,
-        deal_url=deal_url,
-        deal_tier=deal_tier,
-    )
+    api_key = settings.BUFFER_API_KEY
+    channel_id = settings.BUFFER_CHANNEL_ID
 
-    payload = {
-        "text": tweet_text,
-        "title": title,
-        "price": deal_price,
-        "original_price": original_price,
-        "discount": discount_percent,
-        "retailer": retailer,
-        "url": deal_url,
-        "image_url": image_url,
+    # Buffer GraphQL mutation to create a post
+    mutation = """
+    mutation CreatePost($input: CreatePostInput!) {
+      postCreate(input: $input) {
+        __typename
+        ... on PostActionSuccess {
+          post {
+            id
+            status
+          }
+        }
+        ... on PostActionError {
+          message
+        }
+      }
+    }
+    """
+
+    variables = {
+        "input": {
+            "channelId": channel_id,
+            "content": {"text": tweet_text},
+            "schedulingType": "AUTOMATIC",
+            "mode": "ADD_TO_QUEUE",
+        }
     }
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                settings.MAKE_WEBHOOK_URL,
-                json=payload,
+                BUFFER_API_URL,
+                json={"query": mutation, "variables": variables},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
             )
-            if resp.status_code in (200, 201, 202):
-                logger.info(f"Deal sent to Make.com: {title[:50]}")
-                return {"status": "success", "tweet_text": tweet_text}
+
+            if resp.status_code == 200:
+                data = resp.json()
+                result = data.get("data", {}).get("postCreate", {})
+
+                if result.get("__typename") == "PostActionSuccess":
+                    post = result.get("post", {})
+                    logger.info(f"Buffer post created: {post.get('id')} (status: {post.get('status')})")
+                    return {
+                        "status": "success",
+                        "post_id": post.get("id"),
+                        "post_status": post.get("status"),
+                    }
+                else:
+                    error_msg = result.get("message", "Unknown error")
+                    logger.error(f"Buffer API error: {error_msg}")
+                    return {"status": "error", "error": error_msg}
             else:
-                logger.warning(f"Make.com webhook error: {resp.status_code}")
+                logger.error(f"Buffer API HTTP error: {resp.status_code} {resp.text[:200]}")
                 return {"status": "error", "error": f"HTTP {resp.status_code}"}
+
     except Exception as e:
-        logger.error(f"Failed to send to Make.com: {e}")
+        logger.error(f"Failed to post to Buffer: {e}")
         return {"status": "error", "error": str(e)}
 
 
@@ -153,13 +175,11 @@ async def post_deal_to_x(
     deal_tier: str = "clearance",
     image_url: Optional[str] = None,
 ) -> dict:
-    """Post a deal to X via Make.com webhook.
+    """Format a deal as a tweet and post it to X via Buffer API.
 
-    This is the main entry point — called by the API endpoints.
-    Sends the deal to Make.com, which posts it to X via Buffer.
-    Runs 24/7 on the Railway server, no computer needed.
+    Runs 24/7 on the Railway server. No computer, browser, or Make.com needed.
     """
-    return await send_deal_to_make(
+    tweet_text = _format_deal_tweet(
         title=title,
         deal_price=deal_price,
         original_price=original_price,
@@ -167,5 +187,19 @@ async def post_deal_to_x(
         retailer=retailer,
         deal_url=deal_url,
         deal_tier=deal_tier,
-        image_url=image_url,
     )
+
+    result = await post_to_buffer(tweet_text)
+
+    if result.get("status") == "success":
+        return {
+            "status": "success",
+            "post_id": result.get("post_id"),
+            "tweet_text": tweet_text,
+        }
+    else:
+        return {
+            "status": "error",
+            "error": result.get("error"),
+            "tweet_text": tweet_text,
+        }
