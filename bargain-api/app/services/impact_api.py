@@ -171,26 +171,29 @@ async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 
 
             data = resp.json()
             for item in data.get("Items", []):
-                # Parse price
+                # Parse price (Impact.com uses CurrentPrice, not Price)
                 price = None
-                price_str = item.get("Price", "")
+                price_str = item.get("CurrentPrice", "") or item.get("Price", "")
                 if price_str:
                     try:
                         price = Decimal(str(price_str))
                     except Exception:
                         pass
 
-                # Parse original/sale price
+                # Parse original price
                 original_price = None
-                sale_price_str = item.get("SalePrice", "")
-                if sale_price_str:
+                orig_str = item.get("OriginalPrice", "")
+                if orig_str:
                     try:
-                        sale_price = Decimal(str(sale_price_str))
-                        if price and sale_price < price:
-                            original_price = price
-                            price = sale_price
+                        original_price = Decimal(str(orig_str))
                     except Exception:
                         pass
+
+                # If original price is higher, we have a discount
+                if original_price and price and original_price > price:
+                    pass  # Keep both — original_price > price means it's on sale
+                elif original_price and price and original_price == price:
+                    original_price = None  # No discount
 
                 # Get image
                 image_url = ""
@@ -244,7 +247,8 @@ async def fetch_discounted_products(min_discount: int = 40, max_products: int = 
 
     # Sort by number of items (smallest first) and skip huge catalogs
     sorted_catalogs = sorted(catalogs, key=lambda c: int(c.get("NumberOfItems", 0) or 0))
-    target_catalogs = [c for c in sorted_catalogs if int(c.get("NumberOfItems", 0) or 0) <= 5000][:20]
+    # Include catalogs up to 50,000 items (still scannable in reasonable time)
+    target_catalogs = [c for c in sorted_catalogs if int(c.get("NumberOfItems", 0) or 0) <= 50000][:30]
 
     all_products: list[ImpactProduct] = []
     for catalog in target_catalogs:
