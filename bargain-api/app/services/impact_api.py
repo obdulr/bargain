@@ -248,7 +248,8 @@ async def fetch_discounted_products(min_discount: int = 20, max_products: int = 
     # Sort by number of items (smallest first) and skip huge catalogs
     sorted_catalogs = sorted(catalogs, key=lambda c: int(c.get("NumberOfItems", 0) or 0))
     # Include catalogs up to 50,000 items (still scannable in reasonable time)
-    target_catalogs = [c for c in sorted_catalogs if int(c.get("NumberOfItems", 0) or 0) <= 50000][:30]
+    # Prioritize catalogs from different advertisers for variety
+    target_catalogs = [c for c in sorted_catalogs if int(c.get("NumberOfItems", 0) or 0) <= 50000][:40]
 
     all_products: list[ImpactProduct] = []
     for catalog in target_catalogs:
@@ -333,4 +334,66 @@ def _normalize_retailer(campaign_name: str) -> str:
         return "envato"
     if "invideo" in name_lower:
         return "invideo"
+    if "ador" in name_lower or "lightinthebox" in name_lower:
+        return "ador"
+    if "bistromd" in name_lower or "bistro" in name_lower:
+        return "bistromd"
+    if "night air" in name_lower:
+        return "night_air"
+    if "ebrands" in name_lower:
+        return "ebrands"
+    if "digitrading" in name_lower:
+        return "digitrading"
+    if "sentrypc" in name_lower or "spytech" in name_lower:
+        return "sentrypc"
+    if "martinic" in name_lower:
+        return "martinic"
+    if "vetster" in name_lower:
+        return "vetster"
+    if "life360" in name_lower:
+        return "life360"
+    if "kin insurance" in name_lower:
+        return "kin_insurance"
+    if "sesame" in name_lower:
+        return "sesame_care"
+    if "because market" in name_lower:
+        return "because_market"
+    if "anthology" in name_lower:
+        return "anthology"
+    if "trends furniture" in name_lower or "25home" in name_lower:
+        return "25home"
+    if "zhuoshi" in name_lower or "diyustom" in name_lower:
+        return "diyustom"
+    if "luxe collective" in name_lower:
+        return "luxe_collective"
+    if "mx select" in name_lower or "mxfitness" in name_lower:
+        return "mx_fitness"
+    if "elpumps" in name_lower:
+        return "elpumps"
+    if "skystra" in name_lower:
+        return "skystra"
+    if "utsource" in name_lower:
+        return "utsource"
+    if "arbiship" in name_lower:
+        return "arbiship"
+    if "leadpages" in name_lower:
+        return "leadpages"
+    if "coinsmart" in name_lower:
+        return "coinsmart"
+    if "atlasvpn" in name_lower or "peakstar" in name_lower:
+        return "atlasvpn"
+    if "mylio" in name_lower:
+        return "mylio"
+    if "parzin" in name_lower:
+        return "parzin"
+    if "network solutions" in name_lower:
+        return "network_solutions"
+    if "web.com" in name_lower:
+        return "webdotcom"
+    if "prodege" in name_lower or "mypoints" in name_lower:
+        return "mypoints"
+    if "dun & bradstreet" in name_lower or "dnb" in name_lower:
+        return "dun_bradstreet"
+    if "points" in name_lower:
+        return "points"
     return name_lower.replace(" ", "_").replace("affiliate", "").strip("_")[:30]
