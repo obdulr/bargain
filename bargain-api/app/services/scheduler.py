@@ -153,12 +153,13 @@ class ScanScheduler:
                 break
 
     async def _scrape_and_post_to_x(self):
-        """Scrape deals from all sources and post new ones to X via Make.com."""
+        """Scrape deals from all sources and post new ones to X via Buffer API."""
         self._last_deal_scrape_at = datetime.utcnow()
         logger.info("Starting deal scrape + X posting cycle...")
 
         from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
         from app.services.rss_deals_scraper import scrape_all_rss_feeds, save_rss_deals_to_database
+        from app.services.impact_api import fetch_all_impact_deals, _is_configured as impact_configured
         from app.services.x_poster import post_deal_to_x, is_configured as x_configured
 
         db = SessionLocal()
@@ -179,7 +180,56 @@ class ScanScheduler:
             except Exception as e:
                 logger.error(f"RSS scrape failed: {e}")
 
-            # Post new deals to X via Make.com
+            # Scrape Impact.com product catalogs
+            if impact_configured():
+                try:
+                    impact_deals = await fetch_all_impact_deals()
+                    impact_saved = 0
+                    for deal in impact_deals:
+                        try:
+                            if not deal.get("deal_price") or not deal.get("title"):
+                                continue
+                            deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
+                            existing = db.query(ArbitrageDeal).filter(
+                                ArbitrageDeal.asin == deal_id,
+                                ArbitrageDeal.status == "active",
+                            ).first()
+                            if existing:
+                                continue
+                            orig = deal.get("original_price") or 0
+                            buy = deal.get("deal_price") or 0
+                            if not buy or buy <= 0:
+                                continue
+                            tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
+                            new_deal = ArbitrageDeal(
+                                asin=deal_id,
+                                title=deal.get("title", "")[:500],
+                                image_url=deal.get("image_url"),
+                                buy_url=deal.get("deal_url"),
+                                buy_platform=deal.get("retailer", "unknown"),
+                                retailer=deal.get("retailer", "unknown"),
+                                deal_source="online",
+                                buy_price=buy,
+                                sell_platform="impact",
+                                sell_price=orig if orig else buy,
+                                historical_avg=orig if orig else buy,
+                                deal_tier=tier,
+                                net_profit=(orig - buy) if orig else 0,
+                                roi=float((orig - buy) / orig) if orig and orig > 0 else 0,
+                                is_profitable=True,
+                                status="active",
+                                detected_at=datetime.utcnow(),
+                            )
+                            db.add(new_deal)
+                            db.commit()
+                            impact_saved += 1
+                        except Exception:
+                            db.rollback()
+                    logger.info(f"Impact: {len(impact_deals)} found, {impact_saved} saved")
+                except Exception as e:
+                    logger.error(f"Impact scrape failed: {e}")
+
+            # Post new deals to X via Buffer API
             if x_configured():
                 new_deals = (
                     db.query(ArbitrageDeal)
@@ -194,7 +244,7 @@ class ScanScheduler:
                 )
 
                 if new_deals:
-                    logger.info(f"Posting {len(new_deals)} deals to X via Make.com")
+                    logger.info(f"Posting {len(new_deals)} deals to X via Buffer API")
                     posted = 0
                     for deal in new_deals:
                         discount = 0
@@ -227,7 +277,7 @@ class ScanScheduler:
                 else:
                     logger.info("No new deals to post to X")
             else:
-                logger.info("X posting not configured (MAKE_WEBHOOK_URL not set)")
+                logger.info("X posting not configured (BUFFER_API_KEY not set)")
 
         finally:
             db.close()
