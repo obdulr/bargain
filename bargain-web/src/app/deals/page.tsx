@@ -352,6 +352,21 @@ export default function DealsPage() {
               </div>
             )}
 
+            {/* Signup banner for non-logged-in users */}
+            {!idToken && !loadingDeals && deals.length > 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-xl bg-gradient-to-r from-emerald-50 to-emerald-50 px-4 py-3 dark:from-emerald-950/50 dark:to-emerald-950/50">
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                  <span className="font-semibold">Sign up free</span> to unlock prices, affiliate links, and deal alerts.
+                </p>
+                <button
+                  onClick={() => router.push("/signup")}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                >
+                  Get free access →
+                </button>
+              </div>
+            )}
+
             {loadingDeals ? (
               <div className="flex justify-center py-20">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-emerald-500" />
@@ -443,48 +458,78 @@ export default function DealsPage() {
                             {deal.title}
                           </h3>
 
-                          {/* Price */}
+                          {/* Price — blurred for non-logged-in users */}
                           <div className="mt-auto space-y-1">
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
-                                ${deal.buy_price.toFixed(2)}
-                              </span>
-                              {deal.historical_avg && deal.historical_avg > deal.buy_price && (
-                                <span className="text-xs text-zinc-400 line-through dark:text-zinc-500">
-                                  ${deal.historical_avg.toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-                            {savings > 0 && (
-                              <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                Save ${savings.toFixed(2)} ({discount}%)
-                              </p>
-                            )}
+                            {idToken ? (
+                              <>
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+                                    ${deal.buy_price.toFixed(2)}
+                                  </span>
+                                  {deal.historical_avg && deal.historical_avg > deal.buy_price && (
+                                    <span className="text-xs text-zinc-400 line-through dark:text-zinc-500">
+                                      ${deal.historical_avg.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                                {savings > 0 && (
+                                  <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                    Save ${savings.toFixed(2)} ({discount}%)
+                                  </p>
+                                )}
 
-                            {/* Profit (for logged-in users) */}
-                            {deal.net_profit && deal.net_profit > 0 && (
-                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                Profit: <span className="font-semibold text-emerald-600 dark:text-emerald-400">${deal.net_profit.toFixed(2)}</span>
-                                {deal.roi && <span className="ml-1">({(deal.roi * 100).toFixed(0)}% ROI)</span>}
-                              </p>
-                            )}
+                                {/* Profit (for logged-in users) */}
+                                {deal.net_profit && deal.net_profit > 0 && (
+                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                    Profit: <span className="font-semibold text-emerald-600 dark:text-emerald-400">${deal.net_profit.toFixed(2)}</span>
+                                    {deal.roi && <span className="ml-1">({(deal.roi * 100).toFixed(0)}% ROI)</span>}
+                                  </p>
+                                )}
 
-                            {/* Coupon badge */}
-                            {deal.applied_coupon_code && (
-                              <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
-                                🎫 {deal.applied_coupon_code}
-                              </span>
+                                {/* Coupon badge */}
+                                {deal.applied_coupon_code && (
+                                  <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
+                                    🎫 {deal.applied_coupon_code}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {/* Blurred price for non-logged-in users */}
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50 blur-sm select-none">
+                                    $XX.XX
+                                  </span>
+                                  {deal.historical_avg && deal.historical_avg > deal.buy_price && (
+                                    <span className="text-xs text-zinc-400 line-through blur-sm select-none dark:text-zinc-500">
+                                      $XX.XX
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                  Save up to {discount}% off
+                                </p>
+                              </>
                             )}
                           </div>
 
-                          {/* View Deal button */}
-                          {deal.buy_url && (
+                          {/* View Deal button — locked for non-logged-in users */}
+                          {idToken ? (
+                            deal.buy_url && (
+                              <button
+                                onClick={(e) => handleDealClick(deal, e)}
+                                disabled={clickingDeal === deal.id}
+                                className="mt-3 w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-emerald-500 dark:hover:text-white"
+                              >
+                                {clickingDeal === deal.id ? "Opening…" : "View Deal →"}
+                              </button>
+                            )
+                          ) : (
                             <button
-                              onClick={(e) => handleDealClick(deal, e)}
-                              disabled={clickingDeal === deal.id}
-                              className="mt-3 w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-emerald-500 dark:hover:text-white"
+                              onClick={() => router.push("/signup")}
+                              className="mt-3 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                             >
-                              {clickingDeal === deal.id ? "Opening…" : "View Deal →"}
+                              🔒 Sign up to view deal
                             </button>
                           )}
                         </div>
