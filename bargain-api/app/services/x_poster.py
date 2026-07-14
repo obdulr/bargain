@@ -139,7 +139,7 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
     # Instagram and Facebook require metadata with post type
     metadata = {}
     if service == "instagram":
-        metadata["instagram"] = {"type": "post"}
+        metadata["instagram"] = {"type": "post", "shouldShareToFeed": True}
     elif service == "facebook":
         metadata["facebook"] = {"type": "post"}
 
