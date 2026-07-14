@@ -155,14 +155,21 @@ async def _scrape_feed(feed: dict) -> list[PublicCoupon]:
 
                 # Try to find retailer from the feed
                 retailer_name = ""
+                # First try explicit merchant/creator/author tags
                 merchant = item.find("merchant") or item.find("dc:creator") or item.find("author")
-                if merchant:
-                    retailer_name = merchant.text.strip()
+                if merchant and merchant.text.strip():
+                    # Make sure it's not an email or feed name
+                    mtext = merchant.text.strip()
+                    if "@" not in mtext and "rss" not in mtext.lower() and "techbargains" not in mtext.lower():
+                        retailer_name = mtext
+
                 if not retailer_name:
                     # Try to extract from title
                     for known in ["Amazon", "Walmart", "Target", "Best Buy", "eBay",
                                   "Newegg", "Costco", "Home Depot", "Lowe's", "Kohl's",
-                                  "Macy's", "Overstock", "Adorama", "Woot"]:
+                                  "Macy's", "Overstock", "Adorama", "Woot", "Wayfair",
+                                  "Dell", "LEGO", "Samsung", "Apple", "Sony", "LG",
+                                  "Microsoft", "HP", "Lenovo", "Asus", "Acer"]:
                         if known.lower() in title_text.lower():
                             retailer_name = known
                             break
@@ -173,13 +180,27 @@ async def _scrape_feed(feed: dict) -> list[PublicCoupon]:
                         domain = urlparse(link_text).netloc.lower()
                         for known in ["amazon", "walmart", "target", "bestbuy",
                                       "ebay", "newegg", "costco", "homedepot",
-                                      "lowes", "kohls", "macys", "overstock"]:
+                                      "lowes", "kohls", "macys", "overstock",
+                                      "wayfair", "dell", "samsung", "apple"]:
                             if known in domain:
                                 retailer_name = known
                                 break
 
                 if not retailer_name:
-                    continue
+                    # Use the domain from the link as retailer name
+                    if link_text:
+                        domain = urlparse(link_text).netloc.lower()
+                        if domain:
+                            # Extract main domain name
+                            parts = domain.replace("www.", "").split(".")
+                            if parts and parts[0] not in ("rss", "feed", "techbargains"):
+                                retailer_name = parts[0]
+                            else:
+                                continue  # Skip if we can't determine retailer
+                        else:
+                            continue
+                    else:
+                        continue
 
                 retailer = _normalize_retailer(retailer_name)
 
