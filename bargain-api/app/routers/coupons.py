@@ -96,6 +96,47 @@ async def coupon_source_status(
     }
 
 
+@router.get("/public", response_model=List[CouponResponse])
+async def list_public_coupons(
+    retailer: Optional[str] = Query(None, description="Filter by retailer"),
+    category: Optional[str] = Query(None, description="Filter by category"),
+    verified_only: bool = Query(False, description="Only verified coupons"),
+    limit: int = Query(50, le=200),
+    offset: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Public coupon feed — no authentication required."""
+    query = db.query(CouponCode).filter(CouponCode.status == "active")
+    query = query.filter(
+        (CouponCode.expires_at.is_(None)) | (CouponCode.expires_at > datetime.utcnow())
+    )
+
+    if retailer:
+        query = query.filter(CouponCode.retailer == retailer.lower())
+    if category:
+        query = query.filter(CouponCode.category == category.lower())
+    if verified_only:
+        query = query.filter(CouponCode.verified == True)
+
+    query = query.order_by(CouponCode.scraped_at.desc())
+    coupons = query.offset(offset).limit(limit).all()
+    return [_coupon_to_response(c) for c in coupons]
+
+
+@router.get("/public/retailers", response_model=List[str])
+async def get_public_coupon_retailers(
+    db: Session = Depends(get_db),
+):
+    """Get list of retailers that have active coupons — public, no auth."""
+    retailers = (
+        db.query(CouponCode.retailer)
+        .filter(CouponCode.status == "active")
+        .distinct()
+        .all()
+    )
+    return [r[0] for r in retailers if r[0]]
+
+
 @router.get("", response_model=List[CouponResponse])
 async def list_coupons(
     retailer: Optional[str] = Query(None, description="Filter by retailer"),

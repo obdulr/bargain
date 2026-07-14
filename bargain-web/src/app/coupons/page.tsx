@@ -7,6 +7,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
   getCoupons,
+  getPublicCoupons,
+  getPublicCouponRetailers,
   searchCoupons,
   getCouponRetailers,
   getCouponStatus,
@@ -30,23 +32,25 @@ export default function CouponsPage() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [couponSourceConfigured, setCouponSourceConfigured] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
-  }, [user, loading, router]);
-
   const loadCoupons = useCallback(async () => {
-    if (!idToken) return;
     setLoadingCoupons(true);
     setError("");
     try {
-      const data = await getCoupons(idToken, {
-        retailer: selectedRetailer || undefined,
-        verified_only: verifiedOnly,
-        limit: 100,
-      });
-      setCoupons(data);
+      if (idToken) {
+        const data = await getCoupons(idToken, {
+          retailer: selectedRetailer || undefined,
+          verified_only: verifiedOnly,
+          limit: 100,
+        });
+        setCoupons(data);
+      } else {
+        // Public coupons — no auth needed
+        const data = await getPublicCoupons(100, 0, {
+          retailer: selectedRetailer || undefined,
+          verified_only: verifiedOnly,
+        });
+        setCoupons(data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load coupons");
     } finally {
@@ -55,10 +59,14 @@ export default function CouponsPage() {
   }, [idToken, selectedRetailer, verifiedOnly]);
 
   const loadRetailers = useCallback(async () => {
-    if (!idToken) return;
     try {
-      const data = await getCouponRetailers(idToken);
-      setRetailers(data);
+      if (idToken) {
+        const data = await getCouponRetailers(idToken);
+        setRetailers(data);
+      } else {
+        const data = await getPublicCouponRetailers();
+        setRetailers(data);
+      }
     } catch {
       // Non-critical
     }
@@ -71,9 +79,9 @@ export default function CouponsPage() {
       }).catch(() => {
         setCouponSourceConfigured(false);
       });
-      loadCoupons();
-      loadRetailers();
     }
+    loadCoupons();
+    loadRetailers();
   }, [idToken, loadCoupons, loadRetailers]);
 
   async function handleSearch(e: React.FormEvent) {

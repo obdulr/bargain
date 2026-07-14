@@ -115,6 +115,27 @@ export async function getCoupons(
   return fetchWithAuth(`/api/v1/coupons${query ? `?${query}` : ""}`, token, { method: "GET" }) as Promise<Coupon[]>;
 }
 
+export async function getPublicCoupons(
+  limit = 50,
+  offset = 0,
+  params?: { retailer?: string; verified_only?: boolean }
+) {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(limit));
+  qs.set("offset", String(offset));
+  if (params?.retailer) qs.set("retailer", params.retailer);
+  if (params?.verified_only) qs.set("verified_only", "true");
+  const res = await fetch(`${API_URL}/api/v1/coupons/public?${qs.toString()}`);
+  if (!res.ok) throw new Error(`Failed to fetch coupons: ${res.status}`);
+  return res.json() as Promise<Coupon[]>;
+}
+
+export async function getPublicCouponRetailers() {
+  const res = await fetch(`${API_URL}/api/v1/coupons/public/retailers`);
+  if (!res.ok) return [];
+  return res.json() as Promise<string[]>;
+}
+
 export async function searchCoupons(token: string, q: string, retailer?: string) {
   const qs = new URLSearchParams({ q });
   if (retailer) qs.set("retailer", retailer);
