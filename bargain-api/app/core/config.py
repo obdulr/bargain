@@ -125,7 +125,10 @@ class Settings(BaseSettings):
 
     # Buffer API for direct X posting (preferred over Make.com)
     BUFFER_API_KEY: str = ""
-    BUFFER_CHANNEL_ID: str = ""
+    BUFFER_CHANNEL_ID: str = ""        # X/Twitter
+    BUFFER_IG_CHANNEL_ID: str = ""     # Instagram
+    BUFFER_FB_CHANNEL_ID: str = ""     # Facebook
+    BUFFER_ORG_ID: str = ""
 
     # Impact.com Affiliate API
     IMPACT_ACCOUNT_SID: str = ""

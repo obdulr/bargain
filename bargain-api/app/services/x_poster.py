@@ -1,11 +1,17 @@
-"""Buffer API Integration for X Auto-Posting.
+"""Buffer API Integration for Multi-Platform Auto-Posting.
 
-Posts deals directly to Buffer, which posts them to X (@bargain4huntrs).
+Posts deals directly to Buffer, which posts them to:
+  - X (@bargain4huntrs)
+  - Instagram (@bargainhuntrs)
+  - Facebook (Bargain Huntrs)
+
 Runs 24/7 on the Railway server — no computer, browser, or Make.com needed.
 
 Env vars:
-  BUFFER_API_KEY     — Buffer API access token
-  BUFFER_CHANNEL_ID  — Buffer channel ID for X account
+  BUFFER_API_KEY      — Buffer API access token
+  BUFFER_CHANNEL_ID   — Buffer channel ID for X account (primary)
+  BUFFER_IG_CHANNEL_ID — Buffer channel ID for Instagram
+  BUFFER_FB_CHANNEL_ID — Buffer channel ID for Facebook
 """
 import asyncio
 import logging
@@ -18,6 +24,18 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 BUFFER_API_URL = "https://api.buffer.com/graphql"
+
+# All Buffer channel IDs — posts go to all configured channels
+def _get_all_channel_ids() -> list[str]:
+    """Get all configured Buffer channel IDs."""
+    ids = []
+    if getattr(settings, "BUFFER_CHANNEL_ID", ""):
+        ids.append(settings.BUFFER_CHANNEL_ID)  # X/Twitter
+    if getattr(settings, "BUFFER_IG_CHANNEL_ID", ""):
+        ids.append(settings.BUFFER_IG_CHANNEL_ID)  # Instagram
+    if getattr(settings, "BUFFER_FB_CHANNEL_ID", ""):
+        ids.append(settings.BUFFER_FB_CHANNEL_ID)  # Facebook
+    return ids
 
 
 def is_configured() -> bool:
@@ -91,18 +109,8 @@ def _format_deal_tweet(
     return tweet
 
 
-async def post_to_buffer(tweet_text: str) -> dict:
-    """Post a tweet to Buffer via GraphQL API.
-
-    Buffer will post it to X (@bargain4huntrs) automatically.
-    """
-    if not is_configured():
-        return {"status": "error", "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set"}
-
-    api_key = settings.BUFFER_API_KEY
-    channel_id = settings.BUFFER_CHANNEL_ID
-
-    # Buffer GraphQL mutation to create a post
+async def _post_to_channel(api_key: str, channel_id: str, text: str) -> dict:
+    """Post to a single Buffer channel via GraphQL API."""
     mutation = """
     mutation CreatePost($input: CreatePostInput!) {
       createPost(input: $input) {
@@ -123,7 +131,7 @@ async def post_to_buffer(tweet_text: str) -> dict:
     variables = {
         "input": {
             "channelId": channel_id,
-            "text": tweet_text,
+            "text": text,
             "schedulingType": "automatic",
             "mode": "addToQueue",
         }
@@ -143,33 +151,69 @@ async def post_to_buffer(tweet_text: str) -> dict:
             if resp.status_code == 200:
                 data = resp.json()
 
-                # Check for GraphQL errors
                 if data.get("errors"):
                     error_msg = data["errors"][0].get("message", "Unknown error")
-                    logger.error(f"Buffer GraphQL error: {error_msg}")
-                    return {"status": "error", "error": error_msg}
+                    logger.error(f"Buffer GraphQL error ({channel_id}): {error_msg}")
+                    return {"status": "error", "error": error_msg, "channel_id": channel_id}
 
                 result = data.get("data", {}).get("createPost", {})
 
                 if result.get("__typename") == "PostActionSuccess":
                     post = result.get("post", {})
-                    logger.info(f"Buffer post created: {post.get('id')} (status: {post.get('status')})")
+                    logger.info(f"Buffer post created: {post.get('id')} (channel: {channel_id})")
                     return {
                         "status": "success",
                         "post_id": post.get("id"),
-                        "post_status": post.get("status"),
+                        "channel_id": channel_id,
                     }
                 else:
                     error_msg = result.get("message", "Unknown error")
-                    logger.error(f"Buffer API error: {error_msg}")
-                    return {"status": "error", "error": error_msg}
+                    logger.error(f"Buffer API error ({channel_id}): {error_msg}")
+                    return {"status": "error", "error": error_msg, "channel_id": channel_id}
             else:
-                logger.error(f"Buffer API HTTP error: {resp.status_code} {resp.text[:200]}")
-                return {"status": "error", "error": f"HTTP {resp.status_code}"}
+                logger.error(f"Buffer API HTTP error ({channel_id}): {resp.status_code}")
+                return {"status": "error", "error": f"HTTP {resp.status_code}", "channel_id": channel_id}
 
     except Exception as e:
-        logger.error(f"Failed to post to Buffer: {e}")
-        return {"status": "error", "error": str(e)}
+        logger.error(f"Failed to post to Buffer ({channel_id}): {e}")
+        return {"status": "error", "error": str(e), "channel_id": channel_id}
+
+
+async def post_to_buffer(tweet_text: str) -> dict:
+    """Post to all configured Buffer channels (X, Instagram, Facebook).
+
+    Buffer will post to each platform automatically.
+    """
+    if not is_configured():
+        return {"status": "error", "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set"}
+
+    api_key = settings.BUFFER_API_KEY
+    channel_ids = _get_all_channel_ids()
+
+    if not channel_ids:
+        return {"status": "error", "error": "No Buffer channels configured"}
+
+    # Post to all channels concurrently
+    tasks = [_post_to_channel(api_key, cid, tweet_text) for cid in channel_ids]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    successes = [r for r in results if isinstance(r, dict) and r.get("status") == "success"]
+    failures = [r for r in results if isinstance(r, dict) and r.get("status") == "error"]
+
+    if successes:
+        return {
+            "status": "success",
+            "post_id": successes[0].get("post_id"),
+            "channels_posted": len(successes),
+            "channels_failed": len(failures),
+            "results": results,
+        }
+    else:
+        return {
+            "status": "error",
+            "error": "; ".join(f.get("error", "?") for f in failures) or "All channels failed",
+            "results": results,
+        }
 
 
 async def post_deal_to_x(
@@ -182,9 +226,10 @@ async def post_deal_to_x(
     deal_tier: str = "clearance",
     image_url: Optional[str] = None,
 ) -> dict:
-    """Format a deal as a tweet and post it to X via Buffer API.
+    """Format a deal as a post and send it to all social platforms via Buffer.
 
-    Runs 24/7 on the Railway server. No computer, browser, or Make.com needed.
+    Posts to X (@bargain4huntrs), Instagram (@bargainhuntrs), and
+    Facebook (Bargain Huntrs) simultaneously.
     """
     tweet_text = _format_deal_tweet(
         title=title,
@@ -202,6 +247,8 @@ async def post_deal_to_x(
         return {
             "status": "success",
             "post_id": result.get("post_id"),
+            "channels_posted": result.get("channels_posted", 0),
+            "channels_failed": result.get("channels_failed", 0),
             "tweet_text": tweet_text,
         }
     else:
