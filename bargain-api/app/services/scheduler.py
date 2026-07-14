@@ -229,9 +229,11 @@ class ScanScheduler:
                 except Exception as e:
                     logger.error(f"Impact scrape failed: {e}")
 
-            # Post new deals to X via Buffer API
+            # Post new deals to social media via Buffer API
+            # ONLY post deals with affiliate tracking links
             if x_configured():
-                new_deals = (
+                # Fetch more deals than needed, then filter for affiliate links
+                candidate_deals = (
                     db.query(ArbitrageDeal)
                     .filter(
                         ArbitrageDeal.status == "active",
@@ -239,12 +241,26 @@ class ScanScheduler:
                         ArbitrageDeal.alerted_at == None,
                     )
                     .order_by(ArbitrageDeal.detected_at.desc())
-                    .limit(3)
+                    .limit(20)
                     .all()
                 )
 
+                # Only post deals that have affiliate links
+                affiliate_domains = ["sjv.io", "7eer.net", "pxf.io", "evyy.net",
+                    "vneoga.net", "elfm.net", "eyjo.net", "gqco.net", "hmxg.net",
+                    "ijrn.net", "jewn.net", "jyeh.net", "mtko.net", "tcux.net",
+                    "zlvv.net", "goto.walmart.com", "affiliates.abebooks.com",
+                    "tag=bargain0ae", "campid=", "affid="]
+                new_deals = []
+                for d in candidate_deals:
+                    url = (d.buy_url or "").lower()
+                    if any(x in url for x in affiliate_domains):
+                        new_deals.append(d)
+                    if len(new_deals) >= 3:
+                        break
+
                 if new_deals:
-                    logger.info(f"Posting {len(new_deals)} deals to X via Buffer API")
+                    logger.info(f"Posting {len(new_deals)} affiliate deals to social media")
                     posted = 0
                     for deal in new_deals:
                         discount = 0
@@ -266,18 +282,18 @@ class ScanScheduler:
                             posted += 1
                             deal.alerted_at = datetime.utcnow()
                             db.commit()
-                            logger.info(f"  Posted to X: {deal.title[:50]}")
+                            logger.info(f"  Posted: {deal.title[:50]}")
                         else:
-                            logger.warning(f"  X post failed: {result.get('error')}")
+                            logger.warning(f"  Post failed: {result.get('error')}")
 
                         # Small delay between posts
                         await asyncio.sleep(5)
 
-                    logger.info(f"X posting complete: {posted}/{len(new_deals)} posted")
+                    logger.info(f"Posting complete: {posted}/{len(new_deals)} posted")
                 else:
-                    logger.info("No new deals to post to X")
+                    logger.info("No new affiliate deals to post")
             else:
-                logger.info("X posting not configured (BUFFER_API_KEY not set)")
+                logger.info("Social posting not configured (BUFFER_API_KEY not set)")
 
         finally:
             db.close()

@@ -401,22 +401,29 @@ async def post_deal_to_x_public(
     deal_id: str,
     db: Session = Depends(get_db),
 ):
-    """Post a specific deal to X (@bargain4huntrs) — no auth required.
+    """Post a specific deal to all social platforms — no auth required.
 
-    Sends the deal to Make.com webhook, which posts it to X via Buffer.
-    Runs 24/7 on the server — no computer or browser needed.
+    Only posts deals with affiliate tracking links.
+    Posts to X, Instagram, and Facebook via Buffer.
     """
     from app.services.x_poster import post_deal_to_x, is_configured
 
     if not is_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X posting not configured. Set MAKE_WEBHOOK_URL env var.",
+            detail="Posting not configured. Set BUFFER_API_KEY env var.",
         )
 
     deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
+
+    # Only post deals with affiliate links
+    if not _has_affiliate_link(deal.buy_url):
+        raise HTTPException(
+            status_code=400,
+            detail="This deal does not have an affiliate link and cannot be posted.",
+        )
 
     discount = 0
     if deal.historical_avg and deal.historical_avg > deal.buy_price:
@@ -440,22 +447,41 @@ async def post_deal_to_x_public(
     return result
 
 
+def _has_affiliate_link(url: str) -> bool:
+    """Check if a URL has an affiliate/tracking link."""
+    if not url:
+        return False
+    url_lower = url.lower()
+    # Impact.com tracking domains
+    impact_domains = ["sjv.io", "7eer.net", "pxf.io", "evyy.net", "vneoga.net",
+                      "elfm.net", "eyjo.net", "gqco.net", "hmxg.net", "ijrn.net",
+                      "jewn.net", "jyeh.net", "mtko.net", "tcux.net", "zlvv.net"]
+    # Direct affiliate tags
+    affiliate_tags = ["tag=bargain0ae", "campid=", "affid=", "goto.walmart.com",
+                      "affiliates.abebooks.com"]
+    if any(d in url_lower for d in impact_domains):
+        return True
+    if any(t in url_lower for t in affiliate_tags):
+        return True
+    return False
+
+
 @router.post("/deals/post-new-to-x/public", response_model=dict)
 async def post_new_deals_to_x_public(
     max_posts: int = Query(5, le=10),
     db: Session = Depends(get_db),
 ):
-    """Post deals that haven't been posted to X yet — no auth required.
+    """Post deals that haven't been posted to social media yet — no auth required.
 
-    Sends new deals to Make.com webhook for X posting via Buffer.
-    Runs 24/7 on the server. Limits to max_posts per call.
+    Only posts deals that have affiliate tracking links.
+    Posts to X, Instagram, and Facebook via Buffer.
     """
     from app.services.x_poster import post_deal_to_x, is_configured
 
     if not is_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X posting not configured. Set MAKE_WEBHOOK_URL env var.",
+            detail="Posting not configured. Set BUFFER_API_KEY env var.",
         )
 
     deals_to_post = (
@@ -466,16 +492,19 @@ async def post_new_deals_to_x_public(
             ArbitrageDeal.alerted_at == None,
         )
         .order_by(ArbitrageDeal.detected_at.desc())
-        .limit(max_posts)
+        .limit(max_posts * 3)  # Fetch more to filter for affiliate links
         .all()
     )
 
-    if not deals_to_post:
-        return {"posted": 0, "status": "success", "message": "No new deals to post"}
+    # Only post deals with affiliate links
+    affiliate_deals = [d for d in deals_to_post if _has_affiliate_link(d.buy_url)]
+
+    if not affiliate_deals:
+        return {"posted": 0, "status": "success", "message": "No new deals with affiliate links to post"}
 
     results = []
     posted = 0
-    for deal in deals_to_post:
+    for deal in affiliate_deals[:max_posts]:
         discount = 0
         if deal.historical_avg and deal.historical_avg > deal.buy_price:
             discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
