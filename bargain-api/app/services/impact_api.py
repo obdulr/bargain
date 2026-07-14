@@ -33,6 +33,11 @@ def _is_configured() -> bool:
            bool(getattr(settings, "IMPACT_AUTH_TOKEN", ""))
 
 
+def is_configured() -> bool:
+    """Public alias for _is_configured."""
+    return _is_configured()
+
+
 def _get_auth():
     return (settings.IMPACT_ACCOUNT_SID, settings.IMPACT_AUTH_TOKEN)
 
