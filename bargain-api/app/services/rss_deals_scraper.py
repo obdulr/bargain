@@ -347,12 +347,18 @@ def save_rss_deals_to_database(deals: list[RSSDeal], db_session) -> int:
             if existing:
                 continue
 
-            # Build buy URL
+            # Build buy URL — apply affiliate tags for all retailers
             buy_url = deal.product_url or deal.deal_url
             if deal.retailer == "amazon" and asin:
                 buy_url = add_affiliate_tag(
                     f"https://www.amazon.com/dp/{asin}", "amazon", asin
                 )
+            elif deal.product_url:
+                # Use the actual product URL with affiliate tag
+                buy_url = add_affiliate_tag(deal.product_url, deal.retailer)
+            else:
+                # Try to affiliate-tag the deal URL itself
+                buy_url = add_affiliate_tag(deal.deal_url, deal.retailer)
 
             original_price = deal.original_price or deal.deal_price
             net_profit = original_price - deal.deal_price if original_price else D("0")

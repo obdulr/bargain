@@ -69,7 +69,10 @@ def detect_retailer(url: str) -> str:
 def add_affiliate_tag(url: str, retailer: str = "", asin: str = "") -> str:
     """Auto-detect retailer from URL and apply the correct affiliate tag.
 
-    If ``retailer`` is provided it takes precedence over auto-detection.
+    Tries Impact.com affiliate links first (for supported retailers like
+    Walmart, ADOR, Eufy, etc.), then falls back to direct affiliate tags
+    (Amazon Associates, eBay Partner Network, etc.).
+
     Falls back to the plain URL when no affiliate ID is configured or the
     retailer is unsupported.
     """
@@ -78,6 +81,16 @@ def add_affiliate_tag(url: str, retailer: str = "", asin: str = "") -> str:
 
     detected = retailer.lower() if retailer else detect_retailer(url)
 
+    # Try Impact.com first (covers Walmart, ADOR, Eufy, Lenovo, etc.)
+    try:
+        from app.services.impact_affiliate import add_impact_affiliate
+        impact_url = add_impact_affiliate(url, detected)
+        if impact_url != url:
+            return impact_url
+    except Exception:
+        pass
+
+    # Fall back to direct affiliate tags
     if detected == "amazon":
         return add_amazon_affiliate(url, asin)
     if detected == "ebay":
