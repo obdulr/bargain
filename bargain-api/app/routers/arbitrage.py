@@ -69,7 +69,7 @@ class DealResponse(BaseModel):
 async def list_public_deals(
     tier: Optional[str] = Query(None, description="Filter by deal tier"),
     niche: Optional[str] = Query(None, description="Filter by niche"),
-    limit: int = Query(20, le=50),
+    limit: int = Query(20, le=200),
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
