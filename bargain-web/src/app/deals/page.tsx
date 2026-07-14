@@ -338,13 +338,28 @@ export default function DealsPage() {
                       >
                         <div className="flex gap-4">
                           {/* Image */}
-                          {deal.image_url && (
-                            <img
-                              src={deal.image_url}
-                              alt={deal.title}
-                              className="h-20 w-20 rounded-lg object-cover flex-shrink-0"
-                            />
-                          )}
+                          <div className="h-20 w-20 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                            {deal.image_url ? (
+                              <img
+                                src={deal.image_url}
+                                alt={deal.title}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = "none";
+                                  const parent = target.parentElement;
+                                  if (parent && !parent.querySelector(".icon-fallback")) {
+                                    const fallback = document.createElement("div");
+                                    fallback.className = "icon-fallback text-2xl";
+                                    fallback.textContent = "🏷️";
+                                    parent.appendChild(fallback);
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <span className="text-2xl">🏷️</span>
+                            )}
+                          </div>
 
                           {/* Content */}
                           <div className="flex-1 min-w-0">
