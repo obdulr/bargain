@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
+  getPublicDeals,
   getDeals,
   getDealStats,
   getNiches,
   trackAffiliateClick,
+  clickAffiliatePublic,
   getPricePrediction,
   type ArbitrageDeal,
   type Niche,
@@ -31,28 +33,31 @@ export default function DealsPage() {
   const [predictions, setPredictions] = useState<Record<string, PricePrediction>>({});
   const [loadingPrediction, setLoadingPrediction] = useState<Record<string, boolean>>({});
   const [clickingDeal, setClickingDeal] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRetailer, setFilterRetailer] = useState<string | null>(null);
+  const [filterSource, setFilterSource] = useState<string | null>(null);
 
   const isPaidTier = (user?.subscriptionTier || "").toLowerCase() === "pro" ||
     (user?.subscriptionTier || "").toLowerCase() === "enterprise";
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
-  }, [user, loading, router]);
-
+  // Load deals — public for logged-out users, authenticated for logged-in users
   const loadDeals = useCallback(async () => {
-    if (!idToken) return;
     setLoadingDeals(true);
     setError("");
     try {
-      const data = await getDeals(idToken, {
-        tier: selectedTier || undefined,
-        niche: selectedNiche || undefined,
-        min_profit: minProfit ? parseFloat(minProfit) : undefined,
-        limit: 100,
-      });
-      setDeals(data);
+      if (idToken) {
+        const data = await getDeals(idToken, {
+          tier: selectedTier || undefined,
+          niche: selectedNiche || undefined,
+          min_profit: minProfit ? parseFloat(minProfit) : undefined,
+          limit: 100,
+        });
+        setDeals(data);
+      } else {
+        // Public deals — no auth needed
+        const data = await getPublicDeals(100, 0);
+        setDeals(data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load deals");
     } finally {
@@ -81,26 +86,40 @@ export default function DealsPage() {
   }, [idToken]);
 
   useEffect(() => {
+    loadDeals();
+  }, [loadDeals]);
+
+  useEffect(() => {
     if (idToken) {
-      loadDeals();
       loadStats();
       loadNiches();
     }
-  }, [idToken, loadDeals, loadStats, loadNiches]);
+  }, [idToken, loadStats, loadNiches]);
 
   const handleDealClick = useCallback(
     async (deal: ArbitrageDeal, e: React.MouseEvent) => {
       e.preventDefault();
-      if (!idToken || !deal.buy_url) return;
+      if (!deal.buy_url) return;
       setClickingDeal(deal.id);
       try {
-        const result = await trackAffiliateClick(idToken, {
-          url: deal.buy_url,
-          retailer: "amazon",
-          asin: deal.asin,
-          deal_id: deal.id,
-        });
-        window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+        if (idToken) {
+          const result = await trackAffiliateClick(idToken, {
+            url: deal.buy_url,
+            retailer: deal.retailer || "amazon",
+            asin: deal.asin,
+            deal_id: deal.id,
+          });
+          window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+        } else {
+          // Public affiliate click — no auth needed
+          const result = await clickAffiliatePublic({
+            url: deal.buy_url,
+            retailer: deal.retailer || "amazon",
+            asin: deal.asin,
+            deal_id: deal.id,
+          });
+          window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+        }
       } catch {
         // Fallback to the original URL if tracking fails
         window.open(deal.buy_url, "_blank", "noopener,noreferrer");
