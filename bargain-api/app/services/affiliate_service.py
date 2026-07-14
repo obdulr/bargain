@@ -79,6 +79,13 @@ def add_affiliate_tag(url: str, retailer: str = "", asin: str = "") -> str:
     if not url:
         return url
 
+    # Don't affiliate-tag deal aggregator URLs — they're not retailer sites
+    aggregator_domains = ["slickdeals.net", "dansdeals.com", "techbargains.com",
+                          "bensbargains.com", "dealnews.com"]
+    url_lower = url.lower()
+    if any(domain in url_lower for domain in aggregator_domains):
+        return url
+
     detected = retailer.lower() if retailer else detect_retailer(url)
 
     # Try Impact.com first (covers Walmart, ADOR, Eufy, Lenovo, etc.)

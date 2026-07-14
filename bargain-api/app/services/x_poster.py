@@ -260,6 +260,13 @@ async def post_deal_to_x(
     Posts to X (@bargain4huntrs), Instagram (@bargainhuntrs), and
     Facebook (Bargain Huntrs) simultaneously.
     """
+    # Ensure deal URL has affiliate tag
+    try:
+        from app.services.affiliate_service import add_affiliate_tag
+        deal_url = add_affiliate_tag(deal_url, retailer)
+    except Exception:
+        pass
+
     tweet_text = _format_deal_tweet(
         title=title,
         deal_price=deal_price,
