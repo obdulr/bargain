@@ -43,6 +43,26 @@ function retailerDisplayName(retailer?: string): string {
     costco: "Costco",
     lowes: "Lowe's",
     ebay: "eBay",
+    ador: "ADOR",
+    eufy: "Eufy",
+    belkin: "Belkin",
+    lenovo: "Lenovo",
+    abebooks: "AbeBooks",
+    barkbox: "BarkBox",
+    golf_partner: "GOLF Partner",
+    umbra: "Umbra",
+    wine_express: "Wine Express",
+    namecheap: "Namecheap",
+    envato: "Envato",
+    invideo: "InVideo",
+    canva: "Canva",
+    overstock: "Overstock",
+    bhphoto: "B&H Photo",
+    woot: "Woot",
+    newegg: "Newegg",
+    adorama: "Adorama",
+    monoprice: "Monoprice",
+    bestbuy: "Best Buy",
   };
   return map[retailer.toLowerCase()] || retailer.charAt(0).toUpperCase() + retailer.slice(1).replace(/_/g, " ");
 }
@@ -60,6 +80,14 @@ function retailerColor(retailer?: string): string {
     best_buy: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
     costco: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
     lowes: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    ador: "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-400",
+    eufy: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400",
+    belkin: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    lenovo: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+    overstock: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
+    bhphoto: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400",
+    woot: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400",
+    ebay: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
   };
   return map[retailer.toLowerCase()] || "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400";
 }
@@ -161,7 +189,14 @@ export default function HomePage() {
 
   // Filter deals based on search, retailer, and source
   const filteredDeals = useMemo(() => {
+    // Deduplicate by title (keep first occurrence)
+    const seen = new Set<string>();
     return deals.filter((deal) => {
+      // Dedup by title
+      const titleKey = deal.title.slice(0, 80).toLowerCase();
+      if (seen.has(titleKey)) return false;
+      seen.add(titleKey);
+
       // Search filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -200,7 +235,7 @@ export default function HomePage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
             </span>
-            {deals.length > 0 ? `${deals.length} live deals — all 40%+ off` : "Scanning for deals..."}
+            {deals.length > 0 ? `${deals.length} live deals — all 20%+ off` : "Scanning for deals..."}
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl dark:text-zinc-50 leading-[1.1]">
             Hidden deals & price errors<br />

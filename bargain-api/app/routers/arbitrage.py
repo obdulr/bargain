@@ -107,7 +107,16 @@ async def list_public_deals(
         and (Decimal(str(d.historical_avg)) - Decimal(str(d.buy_price))) / Decimal(str(d.historical_avg)) >= min_discount
     ]
 
-    deals = filtered[offset:offset + limit]
+    # Deduplicate by title (keep first occurrence — highest net_profit since sorted)
+    seen_titles = set()
+    unique_deals = []
+    for d in filtered:
+        title_key = (d.title or "")[:80].lower().strip()
+        if title_key and title_key not in seen_titles:
+            seen_titles.add(title_key)
+            unique_deals.append(d)
+
+    deals = unique_deals[offset:offset + limit]
     return [_deal_to_response(d) for d in deals]
 
 
