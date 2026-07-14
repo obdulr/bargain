@@ -83,57 +83,70 @@ def calculate_discounted_price(
 # ─── Main scrape orchestrator ───────────────────────────────────────────────
 
 async def scrape_all_coupons(retailers: Optional[list[str]] = None) -> list[ScrapedCoupon]:
-    """Fetch real coupons from the Impact affiliate network API.
+    """Fetch coupons from Impact.com and public RSS feeds.
 
     Args:
         retailers: Optional list of retailer names to filter by.
-                   If None, fetches from all approved programs.
 
     Returns:
-        List of ScrapedCoupon objects with real, working promo codes.
-        Returns empty list if Impact is not configured.
+        List of ScrapedCoupon objects with real promo codes.
     """
-    if not impact_api.is_configured():
-        logger.warning(
-            "Impact API not configured — no coupons to fetch. "
-            "Set IMPACT_ACCOUNT_SID and IMPACT_AUTH_TOKEN to enable real coupons."
-        )
-        return []
-
-    try:
-        impact_promos = await impact_api.fetch_promo_codes()
-    except Exception as e:
-        logger.error(f"Failed to fetch coupons from Impact: {e}")
-        return []
-
-    # Convert Impact promos to our ScrapedCoupon format
     coupons: list[ScrapedCoupon] = []
-    for promo in impact_promos:
-        # Filter by retailer if specified
-        if retailers and promo.retailer not in retailers:
-            continue
 
-        coupon = ScrapedCoupon(
-            code=promo.code,
-            retailer=promo.retailer,
-            title=promo.title,
-            description=promo.description,
-            discount_type=promo.discount_type,
-            discount_value=promo.discount_value,
-            min_purchase=promo.min_purchase,
-            max_discount=promo.max_discount,
-            category=promo.category,
-            product_url=promo.tracking_url,  # Use the affiliate tracking URL
-            source="impact",
-            source_url=promo.tracking_url,
-            expires_at=promo.end_date,
-        )
-        coupons.append(coupon)
+    # Try Impact.com first
+    if impact_api.is_configured():
+        try:
+            impact_promos = await impact_api.fetch_promo_codes()
+            for promo in impact_promos:
+                if retailers and promo.retailer not in retailers:
+                    continue
+                coupon = ScrapedCoupon(
+                    code=promo.code,
+                    retailer=promo.retailer,
+                    title=promo.title,
+                    description=promo.description,
+                    discount_type=promo.discount_type,
+                    discount_value=promo.discount_value,
+                    min_purchase=promo.min_purchase,
+                    max_discount=promo.max_discount,
+                    category=promo.category,
+                    product_url=promo.tracking_url,
+                    source="impact",
+                    source_url=promo.tracking_url,
+                    expires_at=promo.end_date,
+                )
+                coupons.append(coupon)
+        except Exception as e:
+            logger.error(f"Failed to fetch coupons from Impact: {e}")
 
-    logger.info(f"Fetched {len(coupons)} real coupons from Impact API")
+    # Also scrape public RSS feeds (always — no API key needed)
+    try:
+        from app.services.public_coupon_scraper import scrape_public_coupons
+        public_coupons = await scrape_public_coupons()
+        for pc in public_coupons:
+            if retailers and pc.retailer not in retailers:
+                continue
+            coupon = ScrapedCoupon(
+                code=pc.code,
+                retailer=pc.retailer,
+                title=pc.title,
+                description=pc.description,
+                discount_type=pc.discount_type,
+                discount_value=pc.discount_value,
+                category=pc.category,
+                product_url=pc.source_url,
+                source="rss",
+                source_url=pc.source_url,
+                expires_at=pc.expires_at,
+            )
+            coupons.append(coupon)
+    except Exception as e:
+        logger.error(f"Failed to scrape public coupon feeds: {e}")
+
+    logger.info(f"Fetched {len(coupons)} coupons (Impact + public RSS)")
     return coupons
 
 
 def is_coupon_source_configured() -> bool:
-    """Check if a real coupon data source is configured."""
-    return impact_api.is_configured()
+    """Check if a coupon data source is available (Impact API or public RSS feeds)."""
+    return True  # Public RSS feeds are always available
