@@ -69,6 +69,7 @@ class DealResponse(BaseModel):
 async def list_public_deals(
     tier: Optional[str] = Query(None, description="Filter by deal tier"),
     niche: Optional[str] = Query(None, description="Filter by niche"),
+    source: Optional[str] = Query(None, description="Filter by deal source: online, in_store, nearby"),
     limit: int = Query(20, le=200),
     offset: int = Query(0),
     db: Session = Depends(get_db),
@@ -77,6 +78,7 @@ async def list_public_deals(
 
     Returns active profitable deals for display on the homepage so
     non-logged-in visitors can browse and click affiliate links.
+    Use source=nearby to filter for deals at retailers with physical stores.
     """
     query = db.query(ArbitrageDeal).filter(
         ArbitrageDeal.is_profitable == True,
@@ -94,6 +96,21 @@ async def list_public_deals(
 
     if niche:
         query = query.filter(ArbitrageDeal.niche == niche)
+
+    if source == "online":
+        query = query.filter(ArbitrageDeal.deal_source == "online")
+    elif source == "in_store":
+        query = query.filter(ArbitrageDeal.deal_source == "in_store")
+    elif source == "nearby":
+        # Nearby = deals from retailers with physical stores
+        nearby_retailers = [
+            "walmart", "target", "best_buy", "bestbuy", "home_depot", "homedepot",
+            "lowes", "costco", "samsclub", "sams_club", "kohls", "macys",
+            "office_depot", "office_max", "staples", "bed_bath_beyond",
+            "petsmart", "petco", "academy", "dick_sporting_goods",
+            "tj_maxx", "marshalls", "ross", "ulta", "sephora",
+        ]
+        query = query.filter(ArbitrageDeal.retailer.in_(nearby_retailers))
 
     query = query.order_by(ArbitrageDeal.net_profit.desc())
     all_deals = query.all()

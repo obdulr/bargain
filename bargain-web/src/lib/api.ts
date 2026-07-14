@@ -366,10 +366,11 @@ export async function distributeDeal(token: string, dealId: string) {
 
 // ─── Public Deals (no auth required) ────────────────────────────────────────
 
-export async function getPublicDeals(limit = 20, offset = 0) {
+export async function getPublicDeals(limit = 20, offset = 0, source?: string) {
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
   qs.set("offset", String(offset));
+  if (source) qs.set("source", source);
   return fetchPublic(`/api/v1/arbitrage/deals/public?${qs.toString()}`, {
     method: "GET",
   }) as Promise<ArbitrageDeal[]>;

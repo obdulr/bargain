@@ -52,10 +52,23 @@ export default function DealsPage() {
           min_profit: minProfit ? parseFloat(minProfit) : undefined,
           limit: 100,
         });
-        setDeals(data);
+        // Client-side filter for nearby/online
+        let filtered = data;
+        if (filterSource === "nearby") {
+          const nearbyRetailers = ["walmart", "target", "best_buy", "bestbuy",
+            "home_depot", "homedepot", "lowes", "costco", "samsclub", "sams_club",
+            "kohls", "macys", "office_depot", "staples", "petsmart", "petco",
+            "academy", "tj_maxx", "marshalls", "ross", "ulta", "sephora"];
+          filtered = data.filter(d => nearbyRetailers.includes(d.retailer || ""));
+        } else if (filterSource === "online") {
+          filtered = data.filter(d => (d.deal_source || "online") === "online" &&
+            !["walmart", "target", "best_buy", "bestbuy", "home_depot", "homedepot",
+              "lowes", "costco", "samsclub", "sams_club", "kohls", "macys"].includes(d.retailer || ""));
+        }
+        setDeals(filtered);
       } else {
-        // Public deals — no auth needed
-        const data = await getPublicDeals(100, 0);
+        // Public deals — no auth needed, pass source filter to API
+        const data = await getPublicDeals(100, 0, filterSource || undefined);
         setDeals(data);
       }
     } catch (err) {
@@ -63,7 +76,7 @@ export default function DealsPage() {
     } finally {
       setLoadingDeals(false);
     }
-  }, [idToken, selectedTier, selectedNiche, minProfit]);
+  }, [idToken, selectedTier, selectedNiche, minProfit, filterSource]);
 
   const loadStats = useCallback(async () => {
     if (!idToken) return;
@@ -232,6 +245,32 @@ export default function DealsPage() {
           </div>
         </section>
 
+        {/* Source tabs: All / Online / Nearby */}
+        <section className="px-6 py-3 border-b border-zinc-100 dark:border-zinc-800/60">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex gap-1">
+              {[
+                { key: "", label: "All", icon: "📋" },
+                { key: "online", label: "Online", icon: "💻" },
+                { key: "nearby", label: "Nearby", icon: "📍" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilterSource(tab.key || null)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    filterSource === (tab.key || null)
+                      ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                      : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <span className="mr-1">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Niche filter chips */}
         {niches.length > 0 && (
           <section className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/60">
@@ -378,10 +417,26 @@ export default function DealsPage() {
 
                         {/* Content */}
                         <div className="flex flex-1 flex-col p-3">
-                          {/* Retailer */}
-                          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                            {(deal.retailer || "unknown").replace(/_/g, " ")}
-                          </p>
+                          {/* Retailer + in-store badge */}
+                          <div className="mb-1 flex items-center gap-1.5">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                              {(deal.retailer || "unknown").replace(/_/g, " ")}
+                            </p>
+                            {(() => {
+                              const nearbyRetailers = ["walmart", "target", "best_buy", "bestbuy",
+                                "home_depot", "homedepot", "lowes", "costco", "samsclub", "sams_club",
+                                "kohls", "macys", "office_depot", "staples", "petsmart", "petco",
+                                "academy", "tj_maxx", "marshalls", "ross", "ulta", "sephora"];
+                              if (nearbyRetailers.includes(deal.retailer || "")) {
+                                return (
+                                  <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                                    📍 IN-STORE
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
 
                           {/* Title */}
                           <h3 className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
