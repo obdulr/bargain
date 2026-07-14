@@ -221,6 +221,50 @@ async def get_coupon(
     return _coupon_to_response(coupon)
 
 
+@router.post("/scrape/public", response_model=ScrapeResponse)
+async def trigger_scrape_public(
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape coupons — no auth required.
+
+    Fetches real promo codes from the Impact affiliate network API.
+    """
+    if not is_coupon_source_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Coupon scraping is not configured. Set IMPACT_ACCOUNT_SID and IMPACT_AUTH_TOKEN env vars.",
+        )
+
+    try:
+        scraped_coupons = await scrape_all_coupons()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Scrape failed: {str(e)}",
+        )
+
+    saved = 0
+    errors = 0
+
+    for sc in scraped_coupons:
+        try:
+            _upsert_coupon(db, sc)
+            saved += 1
+        except Exception:
+            errors += 1
+
+    db.commit()
+
+    # Mark expired coupons
+    db.query(CouponCode).filter(
+        CouponCode.expires_at < datetime.utcnow(),
+        CouponCode.status == "active",
+    ).update({"status": "expired"})
+    db.commit()
+
+    return ScrapeResponse(scraped=len(scraped_coupons), saved=saved, errors=errors)
+
+
 @router.post("/scrape", response_model=ScrapeResponse)
 async def trigger_scrape(
     background_tasks: BackgroundTasks,

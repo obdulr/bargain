@@ -72,6 +72,23 @@ class ImpactProduct:
     manufacturer: str = ""
 
 
+@dataclass
+class ImpactPromoCode:
+    """A promo code / coupon from Impact.com Ads endpoint."""
+    code: str
+    retailer: str
+    title: str
+    description: Optional[str] = None
+    discount_type: str = "percentage"  # percentage, fixed, free_shipping
+    discount_value: Decimal = Decimal("0")
+    min_purchase: Optional[Decimal] = None
+    max_discount: Optional[Decimal] = None
+    category: Optional[str] = None
+    tracking_url: str = ""
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+
 async def fetch_campaigns() -> list[ImpactCampaign]:
     """Fetch all brand partnership campaigns."""
     if not _is_configured():
@@ -271,6 +288,113 @@ async def fetch_discounted_products(min_discount: int = 20, max_products: int = 
 
     logger.info(f"Impact: {len(all_products)} discounted products found")
     return all_products
+
+
+async def fetch_promo_codes() -> list[ImpactPromoCode]:
+    """Fetch promo codes / coupons from Impact.com Ads endpoint.
+
+    The Ads endpoint returns promotional links including coupon codes
+    for all approved campaigns.
+    """
+    if not _is_configured():
+        logger.info("Impact.com not configured — no promo codes")
+        return []
+
+    sid = settings.IMPACT_ACCOUNT_SID
+    auth = _get_auth()
+    headers = _get_headers()
+    promos: list[ImpactPromoCode] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Fetch campaigns first to map campaign IDs to retailer names
+            campaigns = await fetch_campaigns()
+            campaign_map = {c.campaign_id: c for c in campaigns}
+
+            # Fetch ads/promo links from all campaigns
+            for campaign in campaigns:
+                try:
+                    url = f"{IMPACT_API_BASE}/Mediapartners/{sid}/Ads"
+                    params = {
+                        "CampaignId": campaign.campaign_id,
+                        "PageSize": "50",
+                    }
+                    resp = await client.get(url, auth=auth, headers=headers, params=params)
+
+                    if resp.status_code != 200:
+                        continue
+
+                    data = resp.json()
+                    for ad in data.get("Ads", []):
+                        # Only process promo/coupon type ads
+                        ad_type = ad.get("Type", "").lower()
+                        if ad_type not in ("promo", "coupon", "text link", "link"):
+                            continue
+
+                        code = ad.get("PromoCode", "") or ad.get("CouponCode", "") or ""
+                        if not code:
+                            continue
+
+                        # Parse discount from title/description
+                        title = ad.get("Name", "") or ad.get("Title", "")
+                        description = ad.get("Description", "")
+                        discount_type = "percentage"
+                        discount_value = Decimal("0")
+
+                        text = f"{title} {description}".lower()
+                        if "free shipping" in text:
+                            discount_type = "free_shipping"
+                        elif "%" in text:
+                            # Extract percentage
+                            import re
+                            pct_match = re.search(r'(\d+)\s*%', text)
+                            if pct_match:
+                                discount_type = "percentage"
+                                discount_value = Decimal(pct_match.group(1))
+                        elif "$" in text and "off" in text:
+                            import re
+                            dollar_match = re.search(r'\$(\d+(?:\.\d+)?)', text)
+                            if dollar_match:
+                                discount_type = "fixed"
+                                discount_value = Decimal(dollar_match.group(1))
+
+                        # Parse dates
+                        start_date = None
+                        end_date = None
+                        try:
+                            if ad.get("StartDate"):
+                                start_date = datetime.fromisoformat(ad["StartDate"].replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+                        try:
+                            if ad.get("EndDate"):
+                                end_date = datetime.fromisoformat(ad["EndDate"].replace("Z", "+00:00"))
+                        except Exception:
+                            pass
+
+                        retailer = _normalize_retailer(campaign.campaign_name)
+
+                        promos.append(ImpactPromoCode(
+                            code=code,
+                            retailer=retailer,
+                            title=title[:200],
+                            description=description[:500] if description else None,
+                            discount_type=discount_type,
+                            discount_value=discount_value,
+                            category=campaign.campaign_name,
+                            tracking_url=ad.get("TrackingUrl", "") or ad.get("LandingUrl", ""),
+                            start_date=start_date,
+                            end_date=end_date,
+                        ))
+                except Exception as e:
+                    logger.debug(f"Ads fetch for campaign {campaign.campaign_id}: {e}")
+                    continue
+
+    except Exception as e:
+        logger.error(f"Impact promo codes fetch failed: {e}")
+
+    logger.info(f"Impact: {len(promos)} promo codes found")
+    return promos
 
 
 async def fetch_all_impact_deals() -> list[dict]:
