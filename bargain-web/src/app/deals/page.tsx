@@ -304,9 +304,9 @@ export default function DealsPage() {
           </div>
         </section>
 
-        {/* Deals list */}
-        <section className="px-6 py-8">
-          <div className="mx-auto max-w-6xl">
+        {/* Deals grid */}
+        <section className="px-4 py-6 sm:px-6">
+          <div className="mx-auto max-w-7xl">
             {error && (
               <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
                 {error}
@@ -328,157 +328,108 @@ export default function DealsPage() {
                 <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
                   {deals.length} deal{deals.length !== 1 ? "s" : ""}
                 </p>
-                <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
                   {deals.map((deal) => {
                     const tier = formatTier(deal.deal_tier);
+                    const discount = deal.historical_avg && deal.historical_avg > deal.buy_price
+                      ? Math.round((1 - deal.buy_price / deal.historical_avg) * 100)
+                      : 0;
+                    const savings = deal.historical_avg && deal.historical_avg > deal.buy_price
+                      ? deal.historical_avg - deal.buy_price
+                      : 0;
                     return (
                       <div
                         key={deal.id}
-                        className="rounded-xl border border-zinc-200 bg-white p-5 transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+                        className="group flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white transition-all hover:border-zinc-300 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
                       >
-                        <div className="flex gap-4">
-                          {/* Image */}
-                          <div className="h-20 w-20 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                            {deal.image_url ? (
-                              <img
-                                src={deal.image_url}
-                                alt={deal.title}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = "none";
-                                  const parent = target.parentElement;
-                                  if (parent && !parent.querySelector(".icon-fallback")) {
-                                    const fallback = document.createElement("div");
-                                    fallback.className = "icon-fallback text-2xl";
-                                    fallback.textContent = "🏷️";
-                                    parent.appendChild(fallback);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <span className="text-2xl">🏷️</span>
+                        {/* Image */}
+                        <div className="relative aspect-square w-full bg-zinc-50 dark:bg-zinc-800 overflow-hidden">
+                          {deal.image_url ? (
+                            <img
+                              src={deal.image_url}
+                              alt={deal.title}
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector(".icon-fallback")) {
+                                  const fallback = document.createElement("div");
+                                  fallback.className = "icon-fallback flex h-full w-full items-center justify-center text-4xl";
+                                  fallback.textContent = "🏷️";
+                                  parent.appendChild(fallback);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-4xl">🏷️</div>
+                          )}
+                          {/* Discount badge */}
+                          {discount > 0 && (
+                            <div className="absolute top-2 left-2 rounded-md bg-red-500 px-2 py-1 text-xs font-bold text-white shadow-sm">
+                              {discount}% OFF
+                            </div>
+                          )}
+                          {/* Tier badge */}
+                          <div className={`absolute top-2 right-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold shadow-sm ${tier.color}`}>
+                            {tier.label}
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex flex-1 flex-col p-3">
+                          {/* Retailer */}
+                          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                            {(deal.retailer || "unknown").replace(/_/g, " ")}
+                          </p>
+
+                          {/* Title */}
+                          <h3 className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
+                            {deal.title}
+                          </h3>
+
+                          {/* Price */}
+                          <div className="mt-auto space-y-1">
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+                                ${deal.buy_price.toFixed(2)}
+                              </span>
+                              {deal.historical_avg && deal.historical_avg > deal.buy_price && (
+                                <span className="text-xs text-zinc-400 line-through dark:text-zinc-500">
+                                  ${deal.historical_avg.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                            {savings > 0 && (
+                              <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                Save ${savings.toFixed(2)} ({discount}%)
+                              </p>
+                            )}
+
+                            {/* Profit (for logged-in users) */}
+                            {deal.net_profit && deal.net_profit > 0 && (
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                Profit: <span className="font-semibold text-emerald-600 dark:text-emerald-400">${deal.net_profit.toFixed(2)}</span>
+                                {deal.roi && <span className="ml-1">({(deal.roi * 100).toFixed(0)}% ROI)</span>}
+                              </p>
+                            )}
+
+                            {/* Coupon badge */}
+                            {deal.applied_coupon_code && (
+                              <span className="inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
+                                🎫 {deal.applied_coupon_code}
+                              </span>
                             )}
                           </div>
 
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${tier.color} mb-1`}>
-                                  {tier.label}
-                                </span>
-                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 truncate">
-                                  {deal.title}
-                                </h3>
-                                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                  ASIN: {deal.asin}
-                                  {deal.niche && ` · ${deal.niche.replace(/_/g, " ")}`}
-                                  {deal.category && ` · ${deal.category}`}
-                                  {deal.bsr && ` · BSR #${deal.bsr.toLocaleString()}`}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Price + profit */}
-                            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
-                              <div>
-                                <span className="text-zinc-500 dark:text-zinc-400">Buy: </span>
-                                <span className="font-bold text-zinc-900 dark:text-zinc-50">
-                                  ${deal.buy_price.toFixed(2)}
-                                </span>
-                                {deal.original_buy_price && (
-                                  <span className="ml-1 text-xs text-zinc-400 line-through">
-                                    ${deal.original_buy_price.toFixed(2)}
-                                  </span>
-                                )}
-                              </div>
-                              <div>
-                                <span className="text-zinc-500 dark:text-zinc-400">Sell: </span>
-                                <span className="font-bold text-zinc-900 dark:text-zinc-50">
-                                  ${deal.sell_price.toFixed(2)}
-                                </span>
-                              </div>
-                              {deal.net_profit && (
-                                <div>
-                                  <span className="text-zinc-500 dark:text-zinc-400">Profit: </span>
-                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                    ${deal.net_profit.toFixed(2)}
-                                  </span>
-                                  {deal.roi && (
-                                    <span className="ml-1 text-xs text-emerald-500">
-                                      ({(deal.roi * 100).toFixed(0)}% ROI)
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {deal.applied_coupon_code && (
-                                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
-                                  🎫 {deal.applied_coupon_code}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Price Prediction */}
-                            <div className="mt-3">
-                              {predictions[deal.id] ? (
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
-                                  {(() => {
-                                    const p = predictions[deal.id];
-                                    const rec = p.trend?.recommendation || p.recommendation || "monitor";
-                                    const badge = formatPrediction(rec);
-                                    return (
-                                      <div className="flex flex-wrap items-center gap-3 text-xs">
-                                        <span className={`inline-block rounded-md px-2 py-0.5 font-medium ${badge.color}`}>
-                                          {badge.arrow} {badge.label}
-                                        </span>
-                                        {p.trend && (
-                                          <>
-                                            <span className="text-zinc-500 dark:text-zinc-400">
-                                              Confidence: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{p.trend.confidence}%</span>
-                                            </span>
-                                            {p.trend.predicted_low !== null && (
-                                              <span className="text-zinc-500 dark:text-zinc-400">
-                                                Predicted low: <span className="font-semibold text-zinc-700 dark:text-zinc-200">${p.trend.predicted_low.toFixed(2)}</span>
-                                              </span>
-                                            )}
-                                            <span className="text-zinc-500 dark:text-zinc-400">
-                                              Trend: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{trendArrow(p.trend.trend)} {p.trend.trend}</span>
-                                            </span>
-                                            {isPaidTier && p.deal_quality && (
-                                              <span className="text-zinc-500 dark:text-zinc-400">
-                                                Quality: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{p.deal_quality.score}/100</span>
-                                              </span>
-                                            )}
-                                          </>
-                                        )}
-                                        {p.message && !p.trend && (
-                                          <span className="text-zinc-500 dark:text-zinc-400">{p.message}</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleLoadPrediction(deal.id)}
-                                  disabled={loadingPrediction[deal.id]}
-                                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50 dark:text-emerald-400 dark:hover:text-emerald-300"
-                                >
-                                  {loadingPrediction[deal.id] ? "Analyzing…" : "✨ Price Prediction"}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Action */}
+                          {/* View Deal button */}
                           {deal.buy_url && (
                             <button
                               onClick={(e) => handleDealClick(deal, e)}
                               disabled={clickingDeal === deal.id}
-                              className="flex-shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 self-center"
+                              className="mt-3 w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-emerald-500 dark:hover:text-white"
                             >
-                              {clickingDeal === deal.id ? "…" : "View →"}
+                              {clickingDeal === deal.id ? "Opening…" : "View Deal →"}
                             </button>
                           )}
                         </div>
