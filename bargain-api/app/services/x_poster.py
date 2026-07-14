@@ -133,20 +133,27 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
         "text": text,
         "schedulingType": "automatic",
         "mode": "addToQueue",
+        "assets": [],
     }
 
-    # Instagram and Facebook require a post type
-    if service in ("instagram", "facebook"):
-        input_data["type"] = "post"
+    # Instagram and Facebook require metadata with post type
+    metadata = {}
+    if service == "instagram":
+        metadata["instagram"] = {"type": "post"}
+    elif service == "facebook":
+        metadata["facebook"] = {"type": "post"}
 
     # Instagram requires at least one image
     # Facebook works better with an image too
-    if service in ("instagram", "facebook"):
-        if image_url:
-            input_data["attachments"] = [{"url": image_url, "type": "image"}]
-        elif service == "instagram":
-            # Instagram absolutely requires an image — use a placeholder
-            input_data["attachments"] = [{"url": "https://www.bargainhuntrs.com/logos/profile-icon-dark.png", "type": "image"}]
+    img_to_use = image_url
+    if not img_to_use and service == "instagram":
+        img_to_use = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
+
+    if img_to_use and service in ("instagram", "facebook"):
+        input_data["assets"] = [{"image": {"url": img_to_use}}]
+
+    if metadata:
+        input_data["metadata"] = metadata
 
     variables = {"input": input_data}
 
