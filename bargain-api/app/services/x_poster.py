@@ -109,7 +109,7 @@ def _format_deal_tweet(
     return tweet
 
 
-async def _post_to_channel(api_key: str, channel_id: str, text: str) -> dict:
+async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: Optional[str] = None, service: str = "twitter") -> dict:
     """Post to a single Buffer channel via GraphQL API."""
     mutation = """
     mutation CreatePost($input: CreatePostInput!) {
@@ -128,14 +128,27 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str) -> dict:
     }
     """
 
-    variables = {
-        "input": {
-            "channelId": channel_id,
-            "text": text,
-            "schedulingType": "automatic",
-            "mode": "addToQueue",
-        }
+    input_data = {
+        "channelId": channel_id,
+        "text": text,
+        "schedulingType": "automatic",
+        "mode": "addToQueue",
     }
+
+    # Instagram and Facebook require a post type
+    if service in ("instagram", "facebook"):
+        input_data["type"] = "post"
+
+    # Instagram requires at least one image
+    # Facebook works better with an image too
+    if service in ("instagram", "facebook"):
+        if image_url:
+            input_data["attachments"] = [{"url": image_url, "type": "image"}]
+        elif service == "instagram":
+            # Instagram absolutely requires an image — use a placeholder
+            input_data["attachments"] = [{"url": "https://www.bargainhuntrs.com/logos/profile-icon-dark.png", "type": "image"}]
+
+    variables = {"input": input_data}
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -153,33 +166,34 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str) -> dict:
 
                 if data.get("errors"):
                     error_msg = data["errors"][0].get("message", "Unknown error")
-                    logger.error(f"Buffer GraphQL error ({channel_id}): {error_msg}")
-                    return {"status": "error", "error": error_msg, "channel_id": channel_id}
+                    logger.error(f"Buffer GraphQL error ({service}): {error_msg}")
+                    return {"status": "error", "error": error_msg, "channel_id": channel_id, "service": service}
 
                 result = data.get("data", {}).get("createPost", {})
 
                 if result.get("__typename") == "PostActionSuccess":
                     post = result.get("post", {})
-                    logger.info(f"Buffer post created: {post.get('id')} (channel: {channel_id})")
+                    logger.info(f"Buffer post created: {post.get('id')} ({service})")
                     return {
                         "status": "success",
                         "post_id": post.get("id"),
                         "channel_id": channel_id,
+                        "service": service,
                     }
                 else:
                     error_msg = result.get("message", "Unknown error")
-                    logger.error(f"Buffer API error ({channel_id}): {error_msg}")
-                    return {"status": "error", "error": error_msg, "channel_id": channel_id}
+                    logger.error(f"Buffer API error ({service}): {error_msg}")
+                    return {"status": "error", "error": error_msg, "channel_id": channel_id, "service": service}
             else:
-                logger.error(f"Buffer API HTTP error ({channel_id}): {resp.status_code}")
-                return {"status": "error", "error": f"HTTP {resp.status_code}", "channel_id": channel_id}
+                logger.error(f"Buffer API HTTP error ({service}): {resp.status_code} {resp.text[:200]}")
+                return {"status": "error", "error": f"HTTP {resp.status_code}", "channel_id": channel_id, "service": service}
 
     except Exception as e:
-        logger.error(f"Failed to post to Buffer ({channel_id}): {e}")
-        return {"status": "error", "error": str(e), "channel_id": channel_id}
+        logger.error(f"Failed to post to Buffer ({service}): {e}")
+        return {"status": "error", "error": str(e), "channel_id": channel_id, "service": service}
 
 
-async def post_to_buffer(tweet_text: str) -> dict:
+async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> dict:
     """Post to all configured Buffer channels (X, Instagram, Facebook).
 
     Buffer will post to each platform automatically.
@@ -188,13 +202,21 @@ async def post_to_buffer(tweet_text: str) -> dict:
         return {"status": "error", "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set"}
 
     api_key = settings.BUFFER_API_KEY
-    channel_ids = _get_all_channel_ids()
 
-    if not channel_ids:
+    # Build channel list with service types
+    channels = []
+    if getattr(settings, "BUFFER_CHANNEL_ID", ""):
+        channels.append((settings.BUFFER_CHANNEL_ID, "twitter"))
+    if getattr(settings, "BUFFER_IG_CHANNEL_ID", ""):
+        channels.append((settings.BUFFER_IG_CHANNEL_ID, "instagram"))
+    if getattr(settings, "BUFFER_FB_CHANNEL_ID", ""):
+        channels.append((settings.BUFFER_FB_CHANNEL_ID, "facebook"))
+
+    if not channels:
         return {"status": "error", "error": "No Buffer channels configured"}
 
     # Post to all channels concurrently
-    tasks = [_post_to_channel(api_key, cid, tweet_text) for cid in channel_ids]
+    tasks = [_post_to_channel(api_key, cid, tweet_text, image_url, svc) for cid, svc in channels]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     successes = [r for r in results if isinstance(r, dict) and r.get("status") == "success"]
@@ -241,7 +263,7 @@ async def post_deal_to_x(
         deal_tier=deal_tier,
     )
 
-    result = await post_to_buffer(tweet_text)
+    result = await post_to_buffer(tweet_text, image_url=image_url)
 
     if result.get("status") == "success":
         return {
