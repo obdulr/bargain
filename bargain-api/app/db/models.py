@@ -32,6 +32,12 @@ class User(Base):
     # Gamification: Aura points for submitting deals, getting upvotes, daily login
     aura_points = Column(Integer, default=0)
     aura_tier = Column(String(20), default="hunter")  # hunter, elite, goat
+    last_login_at = Column(DateTime)  # For daily login streak tracking
+    login_streak = Column(Integer, default=0)  # Consecutive days logged in
+    # Seller portal
+    is_verified_seller = Column(Boolean, default=False)
+    seller_store_name = Column(String(255))
+    seller_website = Column(String(1000))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -270,3 +276,49 @@ class DealVote(Base):
     __table_args__ = (
         UniqueConstraint("deal_id", "user_id", name="uq_deal_vote_user"),
     )
+
+
+class VoucherWinner(Base):
+    """Monthly $100 voucher draw winner, weighted by Aura points."""
+    __tablename__ = "voucher_winners"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    month = Column(String(7), nullable=False, index=True)  # YYYY-MM format
+    prize_amount = Column(Numeric(10, 2), default=100)
+    aura_points_at_draw = Column(Integer)  # User's Aura when they won
+    drawn_at = Column(DateTime, default=datetime.utcnow)
+    paid_at = Column(DateTime)
+    status = Column(String(20), default="pending")  # pending, paid, cancelled
+
+
+class SellerSubmission(Base):
+    """Coupon code or price drop submitted by a verified seller."""
+    __tablename__ = "seller_submissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    submission_type = Column(String(20), nullable=False)  # coupon_code, price_drop
+    # Common fields
+    title = Column(String(500), nullable=False)
+    url = Column(String(1000), nullable=False)
+    retailer = Column(String(100), nullable=False)
+    image_url = Column(String(1000))
+    category = Column(String(100))
+    description = Column(Text)
+    # Coupon-specific
+    coupon_code = Column(String(100))
+    discount_type = Column(String(20))  # percentage, fixed, free_shipping
+    discount_value = Column(Numeric(10, 2))
+    expires_at = Column(DateTime)
+    # Price drop-specific
+    original_price = Column(Numeric(10, 2))
+    sale_price = Column(Numeric(10, 2))
+    # Moderation
+    status = Column(String(20), default="pending", index=True)  # pending, approved, rejected
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime)
+    # When approved, link to created deal/coupon
+    promoted_deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
+    promoted_coupon_id = Column(UUID(as_uuid=True), ForeignKey("coupon_codes.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

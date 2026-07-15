@@ -127,6 +127,31 @@ async def login(body: LoginRequest, db: Session = Depends(get_db)):
     access_token = create_access_token(str(user.id))
     refresh_token = create_refresh_token(str(user.id))
     user.refresh_token = refresh_token
+
+    # Daily login streak + Aura bonus
+    now = datetime.now(timezone.utc)
+    aura_bonus = 0
+    if user.last_login_at:
+        from datetime import timedelta as _td
+        days_since = (now.replace(tzinfo=None) - user.last_login_at.replace(tzinfo=None) if user.last_login_at.tzinfo else user.last_login_at).days
+        if days_since == 1:
+            user.login_streak = (user.login_streak or 0) + 1
+            # Aura bonus: 5 pts per day, capped at 50 for 10-day streak
+            aura_bonus = min(5 * user.login_streak, 50)
+        elif days_since > 1:
+            user.login_streak = 1
+            aura_bonus = 5
+    else:
+        user.login_streak = 1
+        aura_bonus = 5
+
+    if aura_bonus > 0:
+        user.aura_points = (user.aura_points or 0) + aura_bonus
+        # Recompute tier
+        from app.routers.community import _compute_aura_tier
+        user.aura_tier = _compute_aura_tier(user.aura_points)
+
+    user.last_login_at = now.replace(tzinfo=None)
     db.commit()
 
     return {
@@ -140,6 +165,8 @@ async def login(body: LoginRequest, db: Session = Depends(get_db)):
             "lastName": user.last_name,
             "role": user.role,
         },
+        "auraBonus": aura_bonus,
+        "loginStreak": user.login_streak,
     }
 
 

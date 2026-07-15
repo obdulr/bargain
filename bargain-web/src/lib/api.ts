@@ -528,3 +528,115 @@ export async function resetPassword(token: string, new_password: string) {
     body: JSON.stringify({ token, new_password }),
   }) as Promise<{ success: boolean; message: string }>;
 }
+
+// ─── Gamification ─────────────────────────────────────────────────────────────
+
+export interface CommunityStats {
+  total_members: number;
+  deals_posted: number;
+  deals_today: number;
+  votes_today: number;
+  top_hunter: { name: string; aura_points: number } | null;
+  last_voucher_winner: { month: string; user_name: string; aura_points_at_draw: number } | null;
+}
+
+export async function getCommunityStats(token: string) {
+  return fetchWithAuth("/api/v1/gamification/stats", token) as Promise<CommunityStats>;
+}
+
+export async function getVoucherWinners(token: string) {
+  return fetchWithAuth("/api/v1/gamification/voucher/winners", token) as Promise<
+    Array<{ month: string; user_name: string; aura_points_at_draw: number; drawn_at: string; status: string }>
+  >;
+}
+
+export async function getLoginStreak(token: string) {
+  return fetchWithAuth("/api/v1/gamification/streak", token) as Promise<{
+    login_streak: number;
+    last_login_at: string;
+    aura_points: number;
+    aura_tier: string;
+  }>;
+}
+
+// ─── Seller Portal ────────────────────────────────────────────────────────────
+
+export interface SellerProfile {
+  is_verified_seller: boolean;
+  seller_store_name: string | null;
+  seller_website: string | null;
+  submission_count: number;
+}
+
+export async function applyAsSeller(token: string, store_name: string, website: string) {
+  return fetchWithAuth("/api/v1/seller/apply", token, {
+    method: "POST",
+    body: JSON.stringify({ store_name, website }),
+  }) as Promise<{ success: boolean; profile: SellerProfile }>;
+}
+
+export async function getSellerProfile(token: string) {
+  return fetchWithAuth("/api/v1/seller/profile", token) as Promise<SellerProfile>;
+}
+
+export async function submitSellerCoupon(
+  token: string,
+  data: {
+    title: string;
+    url: string;
+    retailer: string;
+    coupon_code: string;
+    discount_type: string;
+    discount_value: number;
+    expires_at?: string;
+    category?: string;
+    description?: string;
+  }
+) {
+  return fetchWithAuth("/api/v1/seller/submit/coupon", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<{ success: boolean; submission: any; coupon: any }>;
+}
+
+export async function submitSellerPriceDrop(
+  token: string,
+  data: {
+    title: string;
+    url: string;
+    retailer: string;
+    original_price: number;
+    sale_price: number;
+    image_url?: string;
+    category?: string;
+    description?: string;
+  }
+) {
+  return fetchWithAuth("/api/v1/seller/submit/price-drop", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<{ success: boolean; submission: any; deal: any }>;
+}
+
+export async function bulkSubmitSellerDeals(
+  token: string,
+  deals: Array<{
+    title: string;
+    url: string;
+    retailer: string;
+    original_price: number;
+    sale_price: number;
+    image_url?: string;
+    category?: string;
+    description?: string;
+  }>
+) {
+  return fetchWithAuth("/api/v1/seller/submit/bulk", token, {
+    method: "POST",
+    body: JSON.stringify({ deals }),
+  }) as Promise<{ success: boolean; created: number; errors: string[] }>;
+}
+
+export async function getSellerSubmissions(token: string) {
+  return fetchWithAuth("/api/v1/seller/submissions", token) as Promise<any[]>;
+}
