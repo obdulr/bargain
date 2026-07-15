@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import User
 from app.services.niche_service import get_all_niches, get_niche
+from app.services.email_service import send_welcome_email, send_password_reset_email
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -99,6 +100,9 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
     refresh_token = create_refresh_token(str(user.id))
     user.refresh_token = refresh_token
     db.commit()
+
+    # Send welcome email (non-blocking, fails silently)
+    send_welcome_email(user.email, user.first_name)
 
     return {
         "accessToken": access_token,
@@ -251,6 +255,52 @@ async def update_phone(
         "success": True,
         "phoneNumber": current_user.phone_number,
     }
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Request a password reset link. Always returns success (don't leak if email exists)."""
+    user = db.query(User).filter(User.email == body.email).first()
+    if user:
+        # Generate a short-lived reset token (1 hour)
+        reset_token = jwt.encode(
+            {"sub": str(user.id), "type": "password_reset", "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM,
+        )
+        send_password_reset_email(user.email, reset_token, user.first_name)
+
+    return {"success": True, "message": "If an account exists with that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password using a valid reset token."""
+    try:
+        payload = jwt.decode(body.token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "password_reset":
+            raise HTTPException(status_code=400, detail="Invalid reset token")
+        user_id = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.hashed_password = hash_password(body.new_password)
+    db.commit()
+
+    return {"success": True, "message": "Password reset successfully."}
 
 
 @router.post("/refresh")

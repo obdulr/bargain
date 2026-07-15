@@ -399,3 +399,132 @@ export async function clickAffiliatePublic(data: {
     tracked: boolean;
   }>;
 }
+
+// ─── Community Deals (User-Submitted) ─────────────────────────────────────────
+
+export interface CommunityDeal {
+  id: string;
+  title: string;
+  url: string;
+  image_url: string | null;
+  retailer: string;
+  original_price: number | null;
+  sale_price: number | null;
+  discount_percent: number | null;
+  category: string | null;
+  description: string | null;
+  status: string;
+  upvotes: number;
+  downvotes: number;
+  score: number;
+  user_aura: number;
+  user_tier: string;
+  created_at: string;
+  user_vote: number | null;
+}
+
+export async function submitCommunityDeal(
+  token: string,
+  data: {
+    title: string;
+    url: string;
+    retailer: string;
+    original_price?: number;
+    sale_price?: number;
+    image_url?: string;
+    category?: string;
+    description?: string;
+  }
+) {
+  return fetchWithAuth("/api/v1/community/deals/submit", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<{ success: boolean; deal: CommunityDeal; aura_points: number; aura_tier: string }>;
+}
+
+export async function getCommunityDeals(
+  token: string,
+  params?: { status?: string; sort?: string; limit?: number; offset?: number }
+) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.sort) qs.set("sort", params.sort);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return fetchWithAuth(`/api/v1/community/deals${query ? `?${query}` : ""}`, token) as Promise<CommunityDeal[]>;
+}
+
+export async function voteCommunityDeal(token: string, dealId: string, vote: 1 | -1) {
+  return fetchWithAuth(`/api/v1/community/deals/${dealId}/vote`, token, {
+    method: "POST",
+    body: JSON.stringify({ vote }),
+  }) as Promise<{
+    success: boolean;
+    action: string;
+    upvotes: number;
+    downvotes: number;
+    score: number;
+    aura_points?: number;
+    aura_tier?: string;
+  }>;
+}
+
+export async function getLeaderboard(token: string, limit = 50) {
+  return fetchWithAuth(`/api/v1/community/leaderboard?limit=${limit}`, token) as Promise<
+    Array<{
+      rank: number;
+      user_id: string;
+      name: string;
+      email: string;
+      aura_points: number;
+      aura_tier: string;
+      deals_submitted: number;
+      is_you: boolean;
+    }>
+  >;
+}
+
+export async function getMyAura(token: string) {
+  return fetchWithAuth("/api/v1/community/aura", token) as Promise<{
+    aura_points: number;
+    aura_tier: string;
+    next_tier: string | null;
+    points_to_next: number;
+    deals_submitted: number;
+    deals_approved: number;
+    total_upvotes_received: number;
+  }>;
+}
+
+export async function getMySubmittedDeals(token: string) {
+  return fetchWithAuth("/api/v1/community/my-deals", token) as Promise<CommunityDeal[]>;
+}
+
+export async function moderateCommunityDeal(
+  token: string,
+  dealId: string,
+  status: "approved" | "rejected",
+  rejection_reason?: string
+) {
+  return fetchWithAuth(`/api/v1/community/deals/${dealId}/moderate`, token, {
+    method: "PUT",
+    body: JSON.stringify({ status, rejection_reason }),
+  }) as Promise<{ success: boolean; deal_id: string; status: string }>;
+}
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+
+export async function requestPasswordReset(email: string) {
+  return fetchPublic("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  }) as Promise<{ success: boolean; message: string }>;
+}
+
+export async function resetPassword(token: string, new_password: string) {
+  return fetchPublic("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password }),
+  }) as Promise<{ success: boolean; message: string }>;
+}

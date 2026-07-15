@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary, Float, Text
+from sqlalchemy import Column, String, DateTime, Numeric, Boolean, JSON, ForeignKey, Integer, LargeBinary, Float, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -29,12 +29,16 @@ class User(Base):
     # Niche subscriptions — users pick which categories they want alerts for.
     # Empty/None means "all niches".
     subscribed_niches = Column(ARRAY(String), default=list)
+    # Gamification: Aura points for submitting deals, getting upvotes, daily login
+    aura_points = Column(Integer, default=0)
+    aura_tier = Column(String(20), default="hunter")  # hunter, elite, goat
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
+    submitted_deals = relationship("UserSubmittedDeal", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def full_name(self) -> str:
@@ -219,3 +223,50 @@ class AffiliateClick(Base):
     clicked_at = Column(DateTime, default=datetime.utcnow, index=True)
     converted = Column(Boolean, default=False)  # Updated later via affiliate API
     commission_earned = Column(Float, default=0.0)
+
+
+class UserSubmittedDeal(Base):
+    """Deal submitted by a community member (user-submitted content)."""
+    __tablename__ = "user_submitted_deals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    url = Column(String(1000), nullable=False)
+    image_url = Column(String(1000))
+    retailer = Column(String(100), nullable=False)
+    original_price = Column(Numeric(10, 2))
+    sale_price = Column(Numeric(10, 2))
+    discount_percent = Column(Float)  # calculated or user-provided
+    category = Column(String(100))
+    description = Column(Text)
+    # Moderation: pending → approved/rejected
+    status = Column(String(20), default="pending", index=True)  # pending, approved, rejected
+    rejection_reason = Column(String(500))
+    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime)
+    # Voting
+    upvotes = Column(Integer, default=0)
+    downvotes = Column(Integer, default=0)
+    score = Column(Integer, default=0)  # upvotes - downvotes
+    # When approved, link to the ArbitrageDeal created from it
+    promoted_deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="submitted_deals")
+
+
+class DealVote(Base):
+    """Vote on a user-submitted deal (upvote or downvote)."""
+    __tablename__ = "deal_votes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deal_id = Column(UUID(as_uuid=True), ForeignKey("user_submitted_deals.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    vote = Column(Integer, nullable=False)  # 1 = upvote, -1 = downvote
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Ensure one vote per user per deal
+    __table_args__ = (
+        UniqueConstraint("deal_id", "user_id", name="uq_deal_vote_user"),
+    )

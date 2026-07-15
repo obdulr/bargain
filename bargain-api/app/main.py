@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, coupons, notifications, affiliate
+from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, coupons, notifications, affiliate, community
 from app.routers.alerts import router as alerts_router, scheduler_router
 
 # WebAuthn (passkeys) is optional — requires python-webauthn package
@@ -50,6 +50,7 @@ app.include_router(notifications.router)
 app.include_router(affiliate.router)
 app.include_router(alerts_router)
 app.include_router(scheduler_router)
+app.include_router(community.router)
 
 
 @app.on_event("startup")
