@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getPublicDeals, clickAffiliatePublic, type ArbitrageDeal } from "@/lib/api";
+import { getPublicDeals, clickAffiliatePublic, getCommunityStats, type ArbitrageDeal, type CommunityStats } from "@/lib/api";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -140,6 +140,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRetailer, setFilterRetailer] = useState<string | null>(null);
   const [filterSource, setFilterSource] = useState<string | null>(null); // online, in_store
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
 
   const loadDeals = useCallback(async () => {
     setLoading(true);
@@ -157,6 +158,14 @@ export default function HomePage() {
   useEffect(() => {
     loadDeals();
   }, [loadDeals]);
+
+  // Load community stats (non-critical, fail silently)
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      getCommunityStats(token).then(setCommunityStats).catch(() => {});
+    }
+  }, []);
 
   const handleDealClick = useCallback(
     async (deal: ArbitrageDeal, e: React.MouseEvent) => {
@@ -491,6 +500,78 @@ export default function HomePage() {
                 </div>
               </>
             )}
+          </div>
+        </section>
+
+        {/* ── Community stats + Seller CTA ──────────────────────────────── */}
+        <section className="border-t border-zinc-200 dark:border-zinc-800 px-6 py-12">
+          <div className="mx-auto max-w-5xl grid gap-6 sm:grid-cols-2">
+            {/* Community */}
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">🎯</span>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Join the Hunt</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
+                    {communityStats ? communityStats.total_members.toLocaleString() : "500k+"}
+                  </p>
+                  <p className="text-xs text-zinc-500">Members</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">
+                    {communityStats ? communityStats.deals_posted.toLocaleString() : "10k+"}
+                  </p>
+                  <p className="text-xs text-zinc-500">Deals Posted</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-emerald-600">$100</p>
+                  <p className="text-xs text-zinc-500">Monthly Draw</p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+                Vote on deals, farm Aura points, and climb to GOAT status.
+              </p>
+              <Link
+                href="/community"
+                className="mt-4 inline-block rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                Start farming Aura →
+              </Link>
+            </div>
+
+            {/* Seller */}
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">🏪</span>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Are you a seller?</h3>
+              </div>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Submit your coupon codes and price drops directly to our deal feed.
+                Verified sellers get instant publishing — no moderation queue.
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500">✓</span> Submit coupon codes
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500">✓</span> Submit price drops
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500">✓</span> Bulk submit via API
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-emerald-500">✓</span> Verified seller badge
+                </li>
+              </ul>
+              <Link
+                href="/seller"
+                className="mt-4 inline-block rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+              >
+                Submit codes · Submit a price drop →
+              </Link>
+            </div>
           </div>
         </section>
 
