@@ -356,7 +356,7 @@ export default function DealsPage() {
             {!idToken && !loadingDeals && deals.length > 0 && (
               <div className="mb-4 flex items-center justify-between rounded-xl bg-gradient-to-r from-emerald-50 to-emerald-50 px-4 py-3 dark:from-emerald-950/50 dark:to-emerald-950/50">
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                  <span className="font-semibold">Sign up free</span> to unlock prices, affiliate links, and deal alerts.
+                  <span className="font-semibold">Sign up free</span> to unlock prices, exclusive deals, and instant alerts.
                 </p>
                 <button
                   onClick={() => router.push("/signup")}
