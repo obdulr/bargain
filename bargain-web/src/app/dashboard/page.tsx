@@ -13,6 +13,7 @@ import {
   deleteWatchlistItem,
   getMyNiches,
   updateMyNiches,
+  updateMyPhone,
   type Niche,
 } from "@/lib/api";
 
@@ -20,6 +21,7 @@ interface UserData {
   id: string;
   email: string;
   subscription_tier: string;
+  phoneNumber?: string | null;
 }
 
 interface WatchlistItem {
@@ -42,6 +44,9 @@ export default function DashboardPage() {
   const [availableNiches, setAvailableNiches] = useState<Niche[]>([]);
   const [subscribedNiches, setSubscribedNiches] = useState<string[]>([]);
   const [savingNiches, setSavingNiches] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneSaved, setPhoneSaved] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -50,7 +55,10 @@ export default function DashboardPage() {
     }
 
     if (idToken) {
-      getCurrentUser(idToken).then(setUserData).catch((err) => setError(err.message));
+      getCurrentUser(idToken).then((data) => {
+        setUserData(data);
+        setPhoneNumber(data.phoneNumber || "");
+      }).catch((err) => setError(err.message));
       loadItems();
       loadNiches();
     }
@@ -92,6 +100,21 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : "Failed to save niche preferences");
     } finally {
       setSavingNiches(false);
+    }
+  }
+
+  async function savePhone() {
+    if (!idToken) return;
+    setSavingPhone(true);
+    setPhoneSaved(false);
+    try {
+      await updateMyPhone(idToken, phoneNumber);
+      setPhoneSaved(true);
+      setTimeout(() => setPhoneSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save phone number");
+    } finally {
+      setSavingPhone(false);
     }
   }
 
@@ -248,6 +271,40 @@ export default function DashboardPage() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Phone number for SMS alerts (Hunter tier) */}
+        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">SMS Alerts</h2>
+            {(userData?.subscription_tier || "free").toLowerCase() !== "hunter" && (
+              <Link href="/pricing" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                Upgrade to Hunter →
+              </Link>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            {(userData?.subscription_tier || "free").toLowerCase() === "hunter"
+              ? "Enter your phone number to receive instant SMS deal alerts."
+              : "SMS alerts are a Hunter plan feature. Upgrade to get instant deal notifications via text."}
+          </p>
+          <div className="mt-5 flex gap-3">
+            <input
+              type="tel"
+              placeholder="+1234567890"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              disabled={(userData?.subscription_tier || "free").toLowerCase() !== "hunter"}
+              className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+            <button
+              onClick={savePhone}
+              disabled={savingPhone || (userData?.subscription_tier || "free").toLowerCase() !== "hunter"}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {savingPhone ? "Saving..." : phoneSaved ? "Saved!" : "Save number"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-12 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">

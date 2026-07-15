@@ -30,9 +30,7 @@ logger = logging.getLogger(__name__)
 # daily_limit of None means unlimited.
 TIER_LIMITS = {
     "free": {"daily_limit": 5, "delay_hours": 24},
-    "hustler": {"daily_limit": 50, "delay_hours": 0},
-    "pro": {"daily_limit": None, "delay_hours": 0},
-    "agency": {"daily_limit": None, "delay_hours": 0},
+    "hunter": {"daily_limit": None, "delay_hours": 0},
 }
 
 # Valid alert types

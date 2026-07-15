@@ -2,7 +2,7 @@
 // (comparison table / FAQ) and the client-side plan cards (Stripe checkout).
 //
 // `planId` maps each frontend plan to a backend subscription plan id
-// ("free" | "pro" | "enterprise") used by the /subscriptions/create-checkout-session
+// ("free" | "hunter") used by the /subscriptions/create-checkout-session
 // endpoint. The actual Stripe price is configured via env vars on the backend.
 
 export interface PlanFeature {
@@ -12,7 +12,7 @@ export interface PlanFeature {
 
 export interface Plan {
   name: string;
-  planId: "free" | "pro" | "enterprise";
+  planId: "free" | "hunter";
   price: string;
   period: string;
   tagline: string;
@@ -51,7 +51,7 @@ export const plans: Plan[] = [
   },
   {
     name: "Hunter",
-    planId: "pro",
+    planId: "hunter",
     price: "$9.99",
     period: "/ month",
     tagline: "Never miss a deal.",

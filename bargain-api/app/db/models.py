@@ -20,6 +20,7 @@ class User(Base):
     stripe_customer_id = Column(String(255))
     stripe_subscription_id = Column(String(255))
     refresh_token = Column(String(255))
+    phone_number = Column(String(20))  # For SMS alerts (Hunter tier)
     # WebAuthn / passkey fields
     credential_id = Column(String(255))
     public_key = Column(LargeBinary)

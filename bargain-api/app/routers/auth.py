@@ -150,6 +150,7 @@ async def profile(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "subscriptionTier": current_user.subscription_tier,
         "subscribedNiches": current_user.subscribed_niches or [],
+        "phoneNumber": current_user.phone_number,
     }
 
 
@@ -165,6 +166,7 @@ async def me(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "subscriptionTier": current_user.subscription_tier,
         "subscribedNiches": current_user.subscribed_niches or [],
+        "phoneNumber": current_user.phone_number,
     }
 
 
@@ -216,6 +218,38 @@ async def update_my_niches(
     return {
         "success": True,
         "subscribed_niches": current_user.subscribed_niches or [],
+    }
+
+
+class UpdatePhone(BaseModel):
+    phone_number: str
+
+
+@router.put("/me/phone")
+async def update_phone(
+    body: UpdatePhone,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the current user's phone number for SMS alerts.
+
+    Only Hunter tier users receive SMS alerts. The phone number should be
+    in E.164 format (e.g. +1234567890).
+    """
+    phone = body.phone_number.strip() if body.phone_number else None
+    if phone and not phone.startswith("+"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number must be in E.164 format (e.g. +1234567890)",
+        )
+
+    current_user.phone_number = phone
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "success": True,
+        "phoneNumber": current_user.phone_number,
     }
 
 

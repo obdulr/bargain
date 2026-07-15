@@ -363,35 +363,31 @@ async def distribute_deal(
 def get_sms_recipients(db: Session, niche: Optional[str] = None) -> list[str]:
     """Get phone numbers of users who should receive SMS alerts.
 
-    Only Hustler/Pro/Agency tier users with phone numbers on file.
+    Only Hunter tier users with phone numbers on file.
 
     Args:
         niche: Optional niche key. When provided, only users whose
             `subscribed_niches` includes this niche (or who have no
             niche subscription = all niches) are returned.
-
-    Note:
-        The User model does not currently store phone numbers, so this
-        returns an empty list until that field is added. The niche
-        filtering logic is implemented here so it activates as soon as
-        phone numbers are stored.
     """
-    # Query users and apply niche-subscription filtering in Python.
-    # (Phone numbers would be added to the User model in a future migration.)
     users = db.query(User).all()
 
     recipients: list[str] = []
     for u in users:
-        # Niche subscription filter: a user receives the alert if they have
-        # no niche subscriptions (all niches) OR the deal's niche is in
-        # their subscribed list.
+        # Only Hunter tier users get SMS alerts
+        tier = (u.subscription_tier or "free").lower()
+        if tier != "hunter":
+            continue
+
+        # Niche subscription filter
         if niche:
             subs = u.subscribed_niches or []
             if subs and niche not in subs:
                 continue
-        # phone = getattr(u, "phone_number", None)
-        # if phone:
-        #     recipients.append(phone)
+
+        phone = getattr(u, "phone_number", None)
+        if phone:
+            recipients.append(phone)
     return recipients
 
 

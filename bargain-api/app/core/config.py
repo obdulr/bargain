@@ -35,8 +35,7 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_FREE: str = ""
-    STRIPE_PRICE_PRO: str = ""
-    STRIPE_PRICE_ENTERPRISE: str = ""
+    STRIPE_PRICE_HUNTER: str = ""
     FRONTEND_URL: str = "http://localhost:3030"
 
     # WebAuthn (passkeys)

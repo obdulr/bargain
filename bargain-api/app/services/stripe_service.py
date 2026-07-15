@@ -36,17 +36,11 @@ SUBSCRIPTION_PLANS: dict[str, dict[str, Any]] = {
         "interval": "month",
         "stripe_price_id": settings.STRIPE_PRICE_FREE,
     },
-    "pro": {
-        "name": "Pro",
-        "price": 29,
+    "hunter": {
+        "name": "Hunter",
+        "price": 9.99,
         "interval": "month",
-        "stripe_price_id": settings.STRIPE_PRICE_PRO,
-    },
-    "enterprise": {
-        "name": "Enterprise",
-        "price": 99,
-        "interval": "month",
-        "stripe_price_id": settings.STRIPE_PRICE_ENTERPRISE,
+        "stripe_price_id": settings.STRIPE_PRICE_HUNTER,
     },
 }
 
@@ -73,7 +67,7 @@ def create_checkout_session(user_id: UUID, plan_id: str, db: Session) -> dict[st
 
     Args:
         user_id: The internal user ID.
-        plan_id: One of "free", "pro", or "enterprise".
+        plan_id: One of "free" or "hunter".
         db: SQLAlchemy session.
 
     Returns:

@@ -271,6 +271,13 @@ export async function updateMyNiches(token: string, subscribed_niches: string[])
   }) as Promise<{ success: boolean; subscribed_niches: string[] }>;
 }
 
+export async function updateMyPhone(token: string, phone_number: string) {
+  return fetchWithAuth("/api/v1/auth/me/phone", token, {
+    method: "PUT",
+    body: JSON.stringify({ phone_number }),
+  }) as Promise<{ success: boolean; phoneNumber: string | null }>;
+}
+
 // ─── Affiliate Click Tracking ───────────────────────────────────────────────
 
 export async function trackAffiliateClick(

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/subscriptions", tags=["subscriptions"])
 
 
 class CreateCheckoutRequest(BaseModel):
-    plan_id: str  # "free" | "pro" | "enterprise"
+    plan_id: str  # "free" | "hunter"
 
 
 class CancelRequest(BaseModel):

@@ -44,6 +44,16 @@ async def add_watchlist_item(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Enforce watchlist limit for free users (10 items max)
+    tier = (current_user.subscription_tier or "free").lower()
+    if tier == "free":
+        count = db.query(WatchlistItem).filter(WatchlistItem.user_id == current_user.id).count()
+        if count >= 10:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Free plan limited to 10 watchlist items. Upgrade to Hunter for unlimited.",
+            )
+
     price, _ = await fetch_price(body.retailer_url)
 
     item = WatchlistItem(

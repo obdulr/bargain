@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.db.session import get_db
 from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot
@@ -790,7 +790,11 @@ async def list_deals(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List arbitrage deals, optionally filtered by tier, niche, and minimum profit."""
+    """List arbitrage deals, optionally filtered by tier, niche, and minimum profit.
+
+    Free users see glitch deals with a 1-hour delay (early access for Hunter).
+    Hunter users see all deals immediately, including priority glitch deals.
+    """
     query = db.query(ArbitrageDeal).filter(ArbitrageDeal.is_profitable == True)
 
     if tier:
@@ -801,6 +805,16 @@ async def list_deals(
 
     if min_profit is not None:
         query = query.filter(ArbitrageDeal.net_profit >= Decimal(str(min_profit)))
+
+    # Tier-based early access: free users see glitch deals 1 hour after detection
+    user_tier = (getattr(current_user, "subscription_tier", "free") or "free").lower()
+    if user_tier == "free":
+        glitch_cutoff = datetime.utcnow() - timedelta(hours=1)
+        # Free users: glitch deals must be older than 1 hour
+        query = query.filter(
+            (ArbitrageDeal.deal_tier != "glitch") |
+            (ArbitrageDeal.detected_at <= glitch_cutoff)
+        )
 
     query = query.order_by(ArbitrageDeal.net_profit.desc())
     deals = query.offset(offset).limit(limit).all()
