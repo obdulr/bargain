@@ -145,11 +145,12 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
 
     # Instagram requires at least one image
     # Facebook works better with an image too
+    # X/Twitter also gets images for better engagement
     img_to_use = image_url
     if not img_to_use and service == "instagram":
         img_to_use = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
 
-    if img_to_use and service in ("instagram", "facebook"):
+    if img_to_use:
         input_data["assets"] = [{"image": {"url": img_to_use}}]
 
     if metadata:
