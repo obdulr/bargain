@@ -96,6 +96,7 @@ def _winner_to_response(winner: VoucherWinner, user: Optional[User] = None) -> d
     else:
         user_name = user.full_name if hasattr(user, "full_name") else user.email
     return {
+        "id": str(winner.id),
         "month": winner.month,
         "user_name": user_name,
         "aura_points_at_draw": winner.aura_points_at_draw,

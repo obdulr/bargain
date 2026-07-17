@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     ALERT_FROM_EMAIL: str = "alerts@bargainhuntrs.com"
 
     # Scheduled Scanning
-    AUTO_SCAN: bool = False
+    AUTO_SCAN: bool = True
     SCAN_INTERVAL_MINUTES: int = 60
 
     # Coupon Scraping
@@ -128,6 +128,7 @@ class Settings(BaseSettings):
     BUFFER_IG_CHANNEL_ID: str = ""     # Instagram
     BUFFER_FB_CHANNEL_ID: str = ""     # Facebook
     BUFFER_ORG_ID: str = ""
+    BUFFER_MAX_QUEUE: int = 10         # Buffer free plan limit for scheduled posts
 
     # Impact.com Affiliate API
     IMPACT_ACCOUNT_SID: str = ""

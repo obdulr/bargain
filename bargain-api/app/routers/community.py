@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.db.models import User, UserSubmittedDeal, DealVote, ArbitrageDeal
 from app.routers.auth import get_current_user
 from app.services.email_service import send_deal_approved_email
+from app.services.niche_service import NICHES as NICHE_KEYS
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
 
@@ -375,6 +376,32 @@ async def moderate_deal(
             # Send approval email
             send_deal_approved_email(submitter.email, deal.title, submitter.first_name)
 
+        # Create an ArbitrageDeal so the community deal appears in the main /deals feed
+        buy_price = deal.sale_price or deal.original_price or Decimal("0")
+        sell_price = deal.original_price or deal.sale_price or Decimal("0")
+        niche = deal.category if deal.category and deal.category in NICHE_KEYS else None
+
+        promoted_deal = ArbitrageDeal(
+            asin=f"community_{deal.id}",
+            title=deal.title,
+            image_url=deal.image_url,
+            buy_url=deal.url,
+            buy_platform="community",
+            retailer=deal.retailer,
+            deal_source="online",
+            buy_price=buy_price,
+            sell_price=sell_price,
+            historical_avg=deal.original_price,
+            deal_tier="clearance",
+            is_profitable=True,
+            status="active",
+            category=deal.category,
+            niche=niche,
+        )
+        db.add(promoted_deal)
+        db.flush()  # Populate promoted_deal.id
+        deal.promoted_deal_id = promoted_deal.id
+
     db.commit()
     db.refresh(deal)
 
@@ -382,6 +409,7 @@ async def moderate_deal(
         "success": True,
         "deal_id": str(deal.id),
         "status": deal.status,
+        "promoted_deal_id": str(deal.promoted_deal_id) if deal.promoted_deal_id else None,
     }
 
 

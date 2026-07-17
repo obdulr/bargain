@@ -546,8 +546,27 @@ export async function getCommunityStats(token: string) {
 
 export async function getVoucherWinners(token: string) {
   return fetchWithAuth("/api/v1/gamification/voucher/winners", token) as Promise<
-    Array<{ month: string; user_name: string; aura_points_at_draw: number; drawn_at: string; status: string }>
+    Array<{ id: string; month: string; user_name: string; aura_points_at_draw: number; drawn_at: string; status: string }>
   >;
+}
+
+export async function runVoucherDraw(token: string) {
+  return fetchWithAuth("/api/v1/gamification/voucher/draw", token, {
+    method: "POST",
+  }) as Promise<{
+    success: boolean;
+    winner: { month: string; user_name: string; aura_points_at_draw: number; drawn_at: string; status: string };
+    winner_id: string;
+  }>;
+}
+
+export async function markVoucherPaid(token: string, winnerId: string) {
+  return fetchWithAuth(`/api/v1/gamification/voucher/${winnerId}/paid`, token, {
+    method: "PUT",
+  }) as Promise<{
+    success: boolean;
+    winner: { month: string; user_name: string; aura_points_at_draw: number; drawn_at: string; status: string };
+  }>;
 }
 
 export async function getLoginStreak(token: string) {

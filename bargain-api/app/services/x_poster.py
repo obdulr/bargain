@@ -24,6 +24,37 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 BUFFER_API_URL = "https://api.buffer.com/graphql"
+BUFFER_PENDING_URL = "https://api.buffer.com/1/pending.json"
+
+
+async def get_buffer_queue_count(api_key: str, channel_id: str) -> int:
+    """Query Buffer's REST API for the number of pending posts in the queue.
+
+    Uses Buffer's pending updates endpoint:
+      GET https://api.buffer.com/1/pending.json?access_token={api_key}
+
+    Returns the count of pending updates. On error, returns 0 so that
+    posting is still attempted (fail-open) rather than blocking forever.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                BUFFER_PENDING_URL,
+                params={"access_token": api_key},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # The endpoint returns a list of pending updates
+                updates = data if isinstance(data, list) else data.get("updates", [])
+                return len(updates)
+            else:
+                logger.warning(
+                    f"Buffer pending API returned HTTP {resp.status_code}: {resp.text[:200]}"
+                )
+                return 0
+    except Exception as e:
+        logger.warning(f"Failed to query Buffer queue count: {e}")
+        return 0
 
 # All Buffer channel IDs — posts go to all configured channels
 def _get_all_channel_ids() -> list[str]:
@@ -222,6 +253,23 @@ async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> di
 
     if not channels:
         return {"status": "error", "error": "No Buffer channels configured"}
+
+    # Check Buffer free plan queue limit before posting.
+    # The Buffer free plan only allows 10 scheduled posts in the queue.
+    # If the queue is full, skip posting to avoid silent failures.
+    max_queue = getattr(settings, "BUFFER_MAX_QUEUE", 10)
+    primary_channel_id = channels[0][0]
+    queue_count = await get_buffer_queue_count(api_key, primary_channel_id)
+    if queue_count >= max_queue:
+        logger.warning(
+            f"Buffer queue full ({queue_count}/{max_queue}). Skipping post to avoid errors."
+        )
+        return {
+            "status": "queue_full",
+            "queue_count": queue_count,
+            "max_queue": max_queue,
+            "error": f"Buffer queue full ({queue_count}/{max_queue})",
+        }
 
     # Post to all channels concurrently
     tasks = [_post_to_channel(api_key, cid, tweet_text, image_url, svc) for cid, svc in channels]
