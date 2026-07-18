@@ -40,12 +40,14 @@ class ScanScheduler:
         self.interval_minutes = interval_minutes or settings.SCAN_INTERVAL_MINUTES
         self._task: Optional[asyncio.Task] = None
         self._deal_task: Optional[asyncio.Task] = None
+        self._engagement_task: Optional[asyncio.Task] = None
         self._running = False
         self._last_scan_at: Optional[datetime] = None
         self._next_scan_at: Optional[datetime] = None
         self._last_scan_status: str = "never"
         self._last_error: Optional[str] = None
         self._last_deal_scrape_at: Optional[datetime] = None
+        self._last_engagement_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:
@@ -73,6 +75,7 @@ class ScanScheduler:
             "last_scan_status": self._last_scan_status,
             "last_error": self._last_error,
             "last_deal_scrape_at": self._last_deal_scrape_at.isoformat() if self._last_deal_scrape_at else None,
+            "last_engagement_at": self._last_engagement_at.isoformat() if self._last_engagement_at else None,
         }
 
     def start(self) -> bool:
@@ -85,7 +88,18 @@ class ScanScheduler:
         self._task = asyncio.create_task(self._run_loop())
         # Start the deal scraping + X posting loop (every 2 hours)
         self._deal_task = asyncio.create_task(self._run_deal_scrape_loop())
-        logger.info(f"Scan scheduler started (interval: {self.interval_minutes}min, deal scrape: every 120min)")
+        # Start the X engagement automation loop (every 30 minutes) if enabled
+        if getattr(settings, "ENGAGEMENT_ENABLED", False):
+            self._engagement_task = asyncio.create_task(self._run_engagement_loop())
+            logger.info(
+                f"Scan scheduler started (interval: {self.interval_minutes}min, "
+                f"deal scrape: every 120min, engagement: every 30min)"
+            )
+        else:
+            logger.info(
+                f"Scan scheduler started (interval: {self.interval_minutes}min, "
+                f"deal scrape: every 120min, engagement: disabled)"
+            )
         return True
 
     def stop(self) -> bool:
@@ -99,6 +113,8 @@ class ScanScheduler:
             self._task.cancel()
         if self._deal_task and not self._deal_task.done():
             self._deal_task.cancel()
+        if self._engagement_task and not self._engagement_task.done():
+            self._engagement_task.cancel()
         self._next_scan_at = None
         logger.info("Scan scheduler stopped")
         return True
@@ -150,6 +166,35 @@ class ScanScheduler:
                 await asyncio.sleep(DEAL_SCRAPE_INTERVAL * 60)
             except asyncio.CancelledError:
                 logger.info("Deal scrape loop cancelled")
+                break
+
+    async def _run_engagement_loop(self):
+        """Background loop that runs the X engagement bot every 30 minutes.
+
+        Likes, replies to, and follows deal-hunting accounts on X to grow the
+        @bargain4huntrs account. Only runs when ENGAGEMENT_ENABLED is True and
+        the required X API v2 tokens are configured.
+        """
+        ENGAGEMENT_INTERVAL = 30  # minutes
+        logger.info("X engagement loop started (every 30min)")
+
+        while self._running:
+            try:
+                from app.services.engagement_bot import run_engagement_cycle, is_configured
+
+                if not is_configured():
+                    logger.info("Engagement bot not configured, skipping cycle")
+                else:
+                    await run_engagement_cycle()
+                    self._last_engagement_at = datetime.utcnow()
+            except Exception as e:
+                logger.error(f"Engagement loop error: {e}", exc_info=True)
+
+            # Wait for next interval
+            try:
+                await asyncio.sleep(ENGAGEMENT_INTERVAL * 60)
+            except asyncio.CancelledError:
+                logger.info("Engagement loop cancelled")
                 break
 
     async def _scrape_and_post_to_x(self):

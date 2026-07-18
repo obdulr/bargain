@@ -117,6 +117,15 @@ class Settings(BaseSettings):
     X_ACCESS_TOKEN: str = ""
     X_ACCESS_TOKEN_SECRET: str = ""
 
+    # X (Twitter) API v2 — engagement automation (likes, replies, follows)
+    X_BEARER_TOKEN: str = ""        # App-only bearer token for search endpoints
+    # X_ACCESS_TOKEN reused above for posting replies / likes / follows (user context)
+    X_USER_ID: str = ""             # Our @bargain4huntrs X user ID
+    ENGAGEMENT_ENABLED: bool = False  # Off by default; enable when tokens are set
+    ENGAGEMENT_MAX_LIKES: int = 15
+    ENGAGEMENT_MAX_REPLIES: int = 5
+    ENGAGEMENT_MAX_FOLLOWS: int = 5
+
     # Make.com webhook URL for X auto-posting via Buffer
     # Create a scenario: Webhook → Buffer → X
     # Set this to the webhook URL from Make.com
@@ -129,6 +138,9 @@ class Settings(BaseSettings):
     BUFFER_FB_CHANNEL_ID: str = ""     # Facebook
     BUFFER_ORG_ID: str = ""
     BUFFER_MAX_QUEUE: int = 10         # Buffer free plan limit for scheduled posts
+
+    # Fallback image used when a deal has no/invalid image URL
+    FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
 
     # Impact.com Affiliate API
     IMPACT_ACCOUNT_SID: str = ""

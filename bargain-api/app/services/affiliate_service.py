@@ -12,6 +12,9 @@ def add_amazon_affiliate(url: str, asin: str = "") -> str:
     """Add Amazon Associates tag to an Amazon product URL."""
     if not settings.AMAZON_ASSOCIATES_TAG:
         return url
+    if "tag=" in url:
+        # Already has an affiliate tag — don't double-tag
+        return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}tag={settings.AMAZON_ASSOCIATES_TAG}"
 
@@ -19,6 +22,9 @@ def add_amazon_affiliate(url: str, asin: str = "") -> str:
 def add_ebay_affiliate(url: str) -> str:
     """Add eBay Partner Network tracking to an eBay URL."""
     if not settings.EBAY_PARTNER_NETWORK_ID:
+        return url
+    if "campid=" in url:
+        # Already has an eBay campaign ID — don't double-tag
         return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}campid={settings.EBAY_PARTNER_NETWORK_ID}"
@@ -28,6 +34,9 @@ def add_walmart_affiliate(url: str) -> str:
     """Add Walmart affiliate tracking."""
     if not settings.WALMART_AFFILIATE_ID:
         return url
+    if "affid=" in url:
+        # Already has a Walmart affiliate ID — don't double-tag
+        return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}affid={settings.WALMART_AFFILIATE_ID}"
 
@@ -36,6 +45,9 @@ def add_target_affiliate(url: str) -> str:
     """Add Target affiliate tracking."""
     if not settings.TARGET_AFFILIATE_ID:
         return url
+    if "affid=" in url:
+        # Already has a Target affiliate ID — don't double-tag
+        return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}affid={settings.TARGET_AFFILIATE_ID}"
 
@@ -43,6 +55,9 @@ def add_target_affiliate(url: str) -> str:
 def add_bestbuy_affiliate(url: str) -> str:
     """Add Best Buy affiliate tracking."""
     if not settings.BESTBUY_AFFILIATE_ID:
+        return url
+    if "affid=" in url:
+        # Already has a Best Buy affiliate ID — don't double-tag
         return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}affid={settings.BESTBUY_AFFILIATE_ID}"

@@ -27,6 +27,34 @@ logger = logging.getLogger(__name__)
 IMPACT_API_BASE = "https://api.impact.com"
 IMPACT_API_VERSION = "16"
 
+# Locale path prefixes that indicate non-English product pages (ADOR etc.)
+LOCALE_PATHS = ("/fr/", "/de/", "/es/", "/it/", "/nl/", "/pt/", "/ja/",
+                "/ko/", "/zh/", "/ru/", "/ar/")
+
+# Non-USD currency query params that indicate localized pricing
+NON_USD_CURRENCIES = ("currency=EUR", "currency=GBP", "currency=CAD",
+                      "currency=AUD", "currency=JPY", "currency=CNY",
+                      "currency=INR", "currency=BRL", "currency=MXN")
+
+
+def _is_localized_url(url: str) -> bool:
+    """Return True if a product URL points to a non-English locale.
+
+    ADOR (and similar Impact.com catalogs) return multiple localized URLs
+    for the same product (e.g. /fr/, /de/). We only want English (/en/ or
+    no locale prefix) and USD pricing.
+    """
+    if not url:
+        return False
+    url_lower = url.lower()
+    # Non-USD currency param → localized
+    if any(cur in url_lower for cur in NON_USD_CURRENCIES):
+        return True
+    # Locale path prefix (but not /en/) → localized
+    if any(loc in url_lower for loc in LOCALE_PATHS):
+        return True
+    return False
+
 
 def _is_configured() -> bool:
     return bool(getattr(settings, "IMPACT_ACCOUNT_SID", "")) and \
@@ -192,7 +220,14 @@ async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 
                 return []
 
             data = resp.json()
+            filtered_count = 0
             for item in data.get("Items", []):
+                # Skip localized (non-English / non-USD) product URLs
+                product_url = item.get("Url", "")
+                if _is_localized_url(product_url):
+                    filtered_count += 1
+                    continue
+
                 # Parse price (Impact.com uses CurrentPrice, not Price)
                 price = None
                 price_str = item.get("CurrentPrice", "") or item.get("Price", "")
@@ -229,7 +264,7 @@ async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 
                     product_id=item.get("Id", ""),
                     name=item.get("Name", "")[:500],
                     description=item.get("Description", "")[:1000],
-                    url=item.get("Url", ""),
+                    url=product_url,
                     image_url=image_url,
                     price=price,
                     original_price=original_price,
@@ -239,6 +274,12 @@ async def fetch_catalog_items(catalog_id: str, page_size: int = 50, page: int = 
                     campaign_name=item.get("CampaignName", ""),
                     manufacturer=item.get("Manufacturer", ""),
                 ))
+
+            if filtered_count:
+                logger.info(
+                    f"Impact catalog {catalog_id}: filtered out {filtered_count} "
+                    f"localized (non-English/non-USD) products"
+                )
 
     except Exception as e:
         logger.error(f"Impact catalog items fetch failed: {e}")
@@ -413,7 +454,13 @@ async def fetch_all_impact_deals() -> list[dict]:
     products = await fetch_discounted_products(min_discount=20, max_products=50)
 
     deals = []
+    filtered_count = 0
     for product in products:
+        # Final safety filter: skip any localized URLs that slipped through
+        if _is_localized_url(product.url):
+            filtered_count += 1
+            continue
+
         discount = 0
         if product.original_price and product.price and product.original_price > product.price:
             discount = int(round((1 - float(product.price) / float(product.original_price)) * 100))
@@ -430,6 +477,10 @@ async def fetch_all_impact_deals() -> list[dict]:
             "campaign_id": product.campaign_id,
         })
 
+    if filtered_count:
+        logger.info(
+            f"Impact: filtered out {filtered_count} localized deals in fetch_all_impact_deals"
+        )
     logger.info(f"Impact: returning {len(deals)} deals")
     return deals
 

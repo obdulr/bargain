@@ -15,6 +15,7 @@ Env vars:
 """
 import asyncio
 import logging
+import random
 from typing import Optional
 
 import httpx
@@ -25,6 +26,33 @@ logger = logging.getLogger(__name__)
 
 BUFFER_API_URL = "https://api.buffer.com/graphql"
 BUFFER_PENDING_URL = "https://api.buffer.com/1/pending.json"
+
+FALLBACK_IMAGE_URL = getattr(settings, "FALLBACK_IMAGE_URL", "") or \
+    "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
+
+
+async def _verify_image_url(url: str) -> bool:
+    """Verify that an image URL is reachable and returns an image.
+
+    Does a HEAD request with a 5-second timeout. Returns True only if the
+    response status is 200 and the content-type starts with "image/".
+    """
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.head(url)
+            if resp.status_code != 200:
+                logger.warning(f"Image verification failed (HTTP {resp.status_code}): {url}")
+                return False
+            content_type = resp.headers.get("content-type", "").lower()
+            if not content_type.startswith("image/"):
+                logger.warning(f"Image verification failed (content-type '{content_type}'): {url}")
+                return False
+            return True
+    except Exception as e:
+        logger.warning(f"Image verification error for {url}: {e}")
+        return False
 
 
 async def get_buffer_queue_count(api_key: str, channel_id: str) -> int:
@@ -75,6 +103,61 @@ def is_configured() -> bool:
            bool(getattr(settings, "BUFFER_CHANNEL_ID", ""))
 
 
+# Hashtag sets per deal tier — randomly picked for variety
+HASHTAG_SETS = {
+    "clearance": [
+        "#deals #clearance",
+        "#DealAlert #ClearanceDeals",
+        "#bargain #deals",
+        "#AmazonDeals #SaveMoney",
+        "#DealOfTheDay #Clearance",
+    ],
+    "glitch": [
+        "#priceerror #deal",
+        "#PriceError #GlitchDeal",
+        "#PriceMistake #DealAlert",
+        "#ErrorDeal #Bargain",
+        "#Glitch #DealOfTheDay",
+    ],
+    "default": [
+        "#deals #bargain",
+        "#DealAlert #BargainHunt",
+        "#SaveMoney #Deals",
+        "#BargainHuntrs #Deals",
+        "#DealOfTheDay #Bargain",
+    ],
+}
+
+# Prefix variety by discount level — randomly picked for variety
+PREFIX_SETS = {
+    "75+": ["⚡ PRICE ERROR", "🚨 INSANE DEAL", "🔥 GLITCH ALERT", "💥 STEAL DEAL"],
+    "50-74": ["🔥 MEGA DEAL", "🔥 HUGE SAVINGS", "⚡ BIG DISCOUNT", "💯 MAJOR DEAL"],
+    "25-49": ["🔥 HOT DEAL", "💰 GREAT PRICE", "✨ NICE FIND", "🎯 GOOD DEAL"],
+    "<25": ["💡 QUICK DEAL", "📌 SAVING", "✅ DEAL", "🏷️ MARKDOWN"],
+}
+
+# Call-to-action lines — added 50% of the time for variety
+CTA_LINES = [
+    "Run, don't walk! 🏃",
+    "Limited time only ⏰",
+    "Stock won't last! 📦",
+    "Grab it before it's gone! ⚡",
+    "This will sell out fast! 🔥",
+    "Don't sleep on this! 😴❌",
+]
+
+
+def _pick_prefix(discount_percent: int, deal_tier: str) -> str:
+    """Pick a randomized prefix based on discount level and deal tier."""
+    if deal_tier == "glitch" or discount_percent >= 75:
+        return random.choice(PREFIX_SETS["75+"])
+    if discount_percent >= 50:
+        return random.choice(PREFIX_SETS["50-74"])
+    if discount_percent >= 25:
+        return random.choice(PREFIX_SETS["25-49"])
+    return random.choice(PREFIX_SETS["<25"])
+
+
 def _format_deal_tweet(
     title: str,
     deal_price: float,
@@ -84,7 +167,7 @@ def _format_deal_tweet(
     deal_url: str,
     deal_tier: str = "clearance",
 ) -> str:
-    """Format a deal into a tweet (max 280 characters)."""
+    """Format a deal into a tweet (max 280 characters) with varied formatting."""
     retailer_names = {
         "amazon": "Amazon",
         "ebay": "eBay",
@@ -107,15 +190,12 @@ def _format_deal_tweet(
     }
     retailer_name = retailer_names.get(retailer, retailer.replace("_", " ").title())
 
-    if deal_tier == "glitch":
-        prefix = "⚡ PRICE ERROR"
-        hashtags = "#priceerror #deal"
-    elif deal_tier == "clearance":
-        prefix = f"🔥 {discount_percent}% OFF"
-        hashtags = "#deals #clearance"
-    else:
-        prefix = f"🔥 {discount_percent}% OFF"
-        hashtags = "#deals #bargain"
+    # Randomized prefix based on discount level / tier
+    prefix = _pick_prefix(discount_percent, deal_tier)
+
+    # Randomized hashtags per tier
+    tier_key = deal_tier if deal_tier in HASHTAG_SETS else "default"
+    hashtags = random.choice(HASHTAG_SETS[tier_key])
 
     max_title_len = 80
     short_title = title[:max_title_len].strip()
@@ -128,14 +208,17 @@ def _format_deal_tweet(
     else:
         price_line = f"${deal_price:.0f} at {retailer_name}"
 
-    tweet = f"{prefix}\n{short_title}\n{price_line}\n\n{deal_url}\n\n{hashtags}"
+    # Random CTA ~50% of the time
+    cta = f" — {random.choice(CTA_LINES)}" if random.random() < 0.5 else ""
+
+    tweet = f"{prefix}\n{short_title}\n{price_line}{cta}\n\n{deal_url}\n\n{hashtags}"
 
     if len(tweet) > 280:
         excess = len(tweet) - 280
         short_title = title[: max(20, max_title_len - excess - 1)].strip() + "…"
-        tweet = f"{prefix}\n{short_title}\n{price_line}\n\n{deal_url}\n\n{hashtags}"
+        tweet = f"{prefix}\n{short_title}\n{price_line}{cta}\n\n{deal_url}\n\n{hashtags}"
         if len(tweet) > 280:
-            tweet = f"{prefix}\n{short_title}\n{price_line}\n\n{deal_url}"
+            tweet = f"{prefix}\n{short_title}\n{price_line}{cta}\n\n{deal_url}"
 
     return tweet
 
@@ -177,9 +260,18 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
     # Instagram requires at least one image
     # Facebook works better with an image too
     # X/Twitter also gets images for better engagement
+    # Verify the image URL before sending to Buffer; fall back to a branded
+    # image if the deal image is missing or fails verification.
     img_to_use = image_url
-    if not img_to_use and service == "instagram":
-        img_to_use = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
+    if img_to_use:
+        if not await _verify_image_url(img_to_use):
+            logger.warning(
+                f"Image verification failed for {service}, using fallback image"
+            )
+            img_to_use = FALLBACK_IMAGE_URL
+    else:
+        # No image provided — use the branded fallback for all services
+        img_to_use = FALLBACK_IMAGE_URL
 
     if img_to_use:
         input_data["assets"] = [{"image": {"url": img_to_use}}]
