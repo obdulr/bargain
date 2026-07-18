@@ -16,11 +16,13 @@ Env vars:
 import asyncio
 import logging
 import random
+from datetime import datetime
 from typing import Optional
 
 import httpx
 
 from app.core.config import settings
+from app.services.utm_service import add_utm_parameters
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +212,10 @@ def _format_deal_tweet(
 
     # Random CTA ~50% of the time
     cta = f" — {random.choice(CTA_LINES)}" if random.random() < 0.5 else ""
+
+    # Tag outgoing deal link with UTM parameters for X/Twitter tracking
+    campaign = f"deal_alert_{datetime.utcnow().strftime('%Y-%m-%d')}"
+    deal_url = add_utm_parameters(deal_url, "twitter", "social", campaign)
 
     tweet = f"{prefix}\n{short_title}\n{price_line}{cta}\n\n{deal_url}\n\n{hashtags}"
 

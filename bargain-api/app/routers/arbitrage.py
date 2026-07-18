@@ -7,7 +7,7 @@ Endpoints for scanning, viewing, and managing arbitrage opportunities.
 from decimal import Decimal
 import asyncio
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -135,6 +135,26 @@ async def list_public_deals(
 
     deals = unique_deals[offset:offset + limit]
     return [_deal_to_response(d) for d in deals]
+
+
+@router.get("/deals/public/{deal_id}", response_model=DealResponse)
+async def get_public_deal(
+    deal_id: UUID = Path(..., description="Public deal ID"),
+    db: Session = Depends(get_db),
+):
+    """Get a single public deal by ID for share previews. No auth required."""
+    deal = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.id == deal_id,
+        ArbitrageDeal.is_profitable == True,
+        ArbitrageDeal.status == "active",
+        ArbitrageDeal.historical_avg != None,
+        ArbitrageDeal.buy_price > 0,
+    ).filter(
+        ArbitrageDeal.historical_avg > ArbitrageDeal.buy_price
+    ).first()
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deal not found")
+    return _deal_to_response(deal)
 
 
 @router.post("/deals/scrape-amazon", response_model=dict)

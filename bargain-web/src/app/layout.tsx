@@ -14,11 +14,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const title = "Bargain Huntrs - Discover Deals, Glitches & Price Drops";
+const description =
+  "Find the best Amazon, Walmart, Target, and eBay deals, price errors, and clearance bargains. Join our deal-hunting community.";
+
 export const metadata: Metadata = {
-  title: "BargainHuntrs",
-  description: "Find arbitrage deals and price glitches before anyone else",
-  other: {
-    "impact-site-verification": "c2aacb17-49a0-4116-b515-be1a7e596103",
+  metadataBase: new URL("https://www.bargainhuntrs.com"),
+  title,
+  description,
+  openGraph: {
+    type: "website",
+    url: "https://www.bargainhuntrs.com",
+    title,
+    description,
+    images: ["/og-image.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@bargain4huntrs",
+    creator: "@bargain4huntrs",
+    title,
+    description,
+    images: ["/og-image.png"],
   },
 };
 

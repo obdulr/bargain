@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getPublicDeals, clickAffiliatePublic, getCommunityStats, type ArbitrageDeal, type CommunityStats } from "@/lib/api";
+import { getPublicDeals, clickAffiliatePublic, getCommunityStats, addUtmParameters, type ArbitrageDeal, type CommunityStats } from "@/lib/api";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -172,16 +172,18 @@ export default function HomePage() {
       e.preventDefault();
       if (!deal.buy_url) return;
       setClickingDeal(deal.id);
+      // Tag outgoing deal links from the homepage feed
+      const dealUrl = addUtmParameters(deal.buy_url, "bargainhuntrs", "deal_card", "deal_click");
       try {
         const result = await clickAffiliatePublic({
-          url: deal.buy_url,
+          url: dealUrl,
           retailer: deal.retailer || "amazon",
           asin: deal.asin,
           deal_id: deal.id,
         });
-        window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+        window.open(result.affiliate_url || dealUrl, "_blank", "noopener,noreferrer");
       } catch {
-        window.open(deal.buy_url, "_blank", "noopener,noreferrer");
+        window.open(dealUrl, "_blank", "noopener,noreferrer");
       } finally {
         setClickingDeal(null);
       }

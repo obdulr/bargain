@@ -13,6 +13,7 @@ import {
   trackAffiliateClick,
   clickAffiliatePublic,
   getPricePrediction,
+  addUtmParameters,
   type ArbitrageDeal,
   type Niche,
   type PricePrediction,
@@ -33,6 +34,7 @@ export default function DealsPage() {
   const [predictions, setPredictions] = useState<Record<string, PricePrediction>>({});
   const [loadingPrediction, setLoadingPrediction] = useState<Record<string, boolean>>({});
   const [clickingDeal, setClickingDeal] = useState<string | null>(null);
+  const [copiedDealId, setCopiedDealId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRetailer, setFilterRetailer] = useState<string | null>(null);
   const [filterSource, setFilterSource] = useState<string | null>(null);
@@ -114,33 +116,55 @@ export default function DealsPage() {
       e.preventDefault();
       if (!deal.buy_url) return;
       setClickingDeal(deal.id);
+      // Tag outgoing deal links from the deal feed
+      const dealUrl = addUtmParameters(deal.buy_url, "bargainhuntrs", "deal_card", "deal_click");
       try {
         if (idToken) {
           const result = await trackAffiliateClick(idToken, {
-            url: deal.buy_url,
+            url: dealUrl,
             retailer: deal.retailer || "amazon",
             asin: deal.asin,
             deal_id: deal.id,
           });
-          window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+          window.open(result.affiliate_url || dealUrl, "_blank", "noopener,noreferrer");
         } else {
           // Public affiliate click — no auth needed
           const result = await clickAffiliatePublic({
-            url: deal.buy_url,
+            url: dealUrl,
             retailer: deal.retailer || "amazon",
             asin: deal.asin,
             deal_id: deal.id,
           });
-          window.open(result.affiliate_url || deal.buy_url, "_blank", "noopener,noreferrer");
+          window.open(result.affiliate_url || dealUrl, "_blank", "noopener,noreferrer");
         }
       } catch {
-        // Fallback to the original URL if tracking fails
-        window.open(deal.buy_url, "_blank", "noopener,noreferrer");
+        // Fallback to the UTM-tagged URL if tracking fails
+        window.open(dealUrl, "_blank", "noopener,noreferrer");
       } finally {
         setClickingDeal(null);
       }
     },
     [idToken]
+  );
+
+  const handleShare = useCallback(
+    async (deal: ArbitrageDeal) => {
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://www.bargainhuntrs.com";
+      const shareUrl = addUtmParameters(
+        `${baseUrl}/deals/${deal.id}`,
+        "bargainhuntrs",
+        "share",
+        "deal_share"
+      );
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedDealId(deal.id);
+        setTimeout(() => setCopiedDealId(null), 2000);
+      } catch {
+        // Non-critical
+      }
+    },
+    []
   );
 
   const handleLoadPrediction = useCallback(
@@ -513,25 +537,33 @@ export default function DealsPage() {
                             )}
                           </div>
 
-                          {/* View Deal button — locked for non-logged-in users */}
-                          {idToken ? (
-                            deal.buy_url && (
+                          {/* View Deal + Share buttons */}
+                          <div className="mt-3 flex gap-2">
+                            {idToken ? (
+                              deal.buy_url && (
+                                <button
+                                  onClick={(e) => handleDealClick(deal, e)}
+                                  disabled={clickingDeal === deal.id}
+                                  className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-emerald-500 dark:hover:text-white"
+                                >
+                                  {clickingDeal === deal.id ? "Opening…" : "View Deal →"}
+                                </button>
+                              )
+                            ) : (
                               <button
-                                onClick={(e) => handleDealClick(deal, e)}
-                                disabled={clickingDeal === deal.id}
-                                className="mt-3 w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-emerald-500 dark:hover:text-white"
+                                onClick={() => router.push("/signup")}
+                                className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                               >
-                                {clickingDeal === deal.id ? "Opening…" : "View Deal →"}
+                                🔒 Sign up to view deal
                               </button>
-                            )
-                          ) : (
+                            )}
                             <button
-                              onClick={() => router.push("/signup")}
-                              className="mt-3 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                              onClick={() => handleShare(deal)}
+                              className="shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                             >
-                              🔒 Sign up to view deal
+                              {copiedDealId === deal.id ? "Copied!" : "Share"}
                             </button>
-                          )}
+                          </div>
                         </div>
                       </div>
                     );

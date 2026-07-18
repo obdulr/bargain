@@ -363,7 +363,8 @@ async def distribute_deal(
 def get_sms_recipients(db: Session, niche: Optional[str] = None) -> list[str]:
     """Get phone numbers of users who should receive SMS alerts.
 
-    Only Hunter tier users with phone numbers on file.
+    Only Hunter tier users who have opted into SMS deal alerts and have
+    a phone number on file.
 
     Args:
         niche: Optional niche key. When provided, only users whose
@@ -377,6 +378,10 @@ def get_sms_recipients(db: Session, niche: Optional[str] = None) -> list[str]:
         # Only Hunter tier users get SMS alerts
         tier = (u.subscription_tier or "free").lower()
         if tier != "hunter":
+            continue
+
+        # Respect SMS deal alert preference
+        if not getattr(u, "sms_deal_alerts", False):
             continue
 
         # Niche subscription filter

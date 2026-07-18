@@ -371,6 +371,44 @@ export async function distributeDeal(token: string, dealId: string) {
   return fetchWithAuth(`/api/v1/notifications/deal/${dealId}/distribute`, token, { method: "POST" }) as Promise<{ results: Record<string, boolean> }>;
 }
 
+export interface NotificationPreferences {
+  email_deal_alerts: boolean;
+  sms_deal_alerts: boolean;
+  discord_alerts: boolean;
+  telegram_alerts: boolean;
+  push_notifications: boolean;
+  weekly_digest: boolean;
+  glitch_alerts: boolean;
+}
+
+export async function getNotificationPreferences(token: string) {
+  return fetchWithAuth("/api/v1/notifications/preferences", token, { method: "GET" }) as Promise<NotificationPreferences>;
+}
+
+export async function updateNotificationPreferences(token: string, preferences: NotificationPreferences) {
+  return fetchWithAuth("/api/v1/notifications/preferences", token, {
+    method: "PUT",
+    body: JSON.stringify(preferences),
+  }) as Promise<NotificationPreferences>;
+}
+
+export interface NicheSubscriptionResponse {
+  available_niches: Niche[];
+  subscribed_niches: string[];
+}
+
+export async function getNicheSubscriptions(token: string) {
+  return fetchWithAuth("/api/v1/notifications/niches", token, { method: "GET" }) as Promise<NicheSubscriptionResponse>;
+}
+
+export async function subscribeToNiche(token: string, niche: string) {
+  return fetchWithAuth(`/api/v1/notifications/niches/${encodeURIComponent(niche)}/subscribe`, token, { method: "POST" });
+}
+
+export async function unsubscribeFromNiche(token: string, niche: string) {
+  return fetchWithAuth(`/api/v1/notifications/niches/${encodeURIComponent(niche)}/unsubscribe`, token, { method: "DELETE" });
+}
+
 // ─── Public Deals (no auth required) ────────────────────────────────────────
 
 export async function getPublicDeals(limit = 20, offset = 0, source?: string) {
@@ -381,6 +419,32 @@ export async function getPublicDeals(limit = 20, offset = 0, source?: string) {
   return fetchPublic(`/api/v1/arbitrage/deals/public?${qs.toString()}`, {
     method: "GET",
   }) as Promise<ArbitrageDeal[]>;
+}
+
+export async function getPublicDeal(dealId: string) {
+  const res = await fetch(`${API_URL}/api/v1/arbitrage/deals/public/${dealId}`);
+  if (!res.ok) throw new Error(`Failed to fetch deal: ${res.status}`);
+  return res.json() as Promise<ArbitrageDeal>;
+}
+
+export function addUtmParameters(
+  url: string,
+  source: string,
+  medium: string,
+  campaign: string
+): string {
+  if (!url) return url;
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://www.bargainhuntrs.com";
+    const urlObj = new URL(url, base);
+    const params = urlObj.searchParams;
+    if (!params.has("utm_source")) params.set("utm_source", source);
+    if (!params.has("utm_medium")) params.set("utm_medium", medium);
+    params.set("utm_campaign", campaign);
+    return urlObj.toString();
+  } catch {
+    return url;
+  }
 }
 
 export async function clickAffiliatePublic(data: {
@@ -495,6 +559,48 @@ export async function getMyAura(token: string) {
     deals_approved: number;
     total_upvotes_received: number;
   }>;
+}
+
+// ─── Referrals ───────────────────────────────────────────────────────────────
+
+export interface ReferralStats {
+  success: boolean;
+  referral_code: string;
+  referral_link: string;
+  referral_count: number;
+  total_aura_earned: number;
+}
+
+export interface ReferralLeaderboardEntry {
+  rank: number;
+  user_id: string;
+  name: string;
+  email: string;
+  referral_count: number;
+  aura_points: number;
+  aura_tier: string;
+}
+
+export async function getReferralStats(token: string) {
+  return fetchWithAuth("/api/v1/referrals/me", token) as Promise<ReferralStats>;
+}
+
+export async function claimReferral(token: string, referral_code: string) {
+  return fetchWithAuth("/api/v1/referrals/claim", token, {
+    method: "POST",
+    body: JSON.stringify({ referral_code }),
+  }) as Promise<{
+    success: boolean;
+    referrer_id: string;
+    referral_code: string;
+    referrer_aura_bonus: number;
+    referee_aura_bonus: number;
+    referral_count: number;
+  }>;
+}
+
+export async function getReferralLeaderboard(limit = 50) {
+  return fetchPublic(`/api/v1/referrals/leaderboard?limit=${limit}`) as Promise<ReferralLeaderboardEntry[]>;
 }
 
 export async function getMySubmittedDeals(token: string) {

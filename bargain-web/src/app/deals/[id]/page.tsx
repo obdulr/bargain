@@ -1,0 +1,199 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { addUtmParameters, getPublicDeal, type ArbitrageDeal } from "@/lib/api";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+function retailerName(retailer?: string): string {
+  if (!retailer) return "Amazon";
+  const map: Record<string, string> = {
+    amazon: "Amazon",
+    walmart: "Walmart",
+    target: "Target",
+    best_buy: "Best Buy",
+    bestbuy: "Best Buy",
+    home_depot: "Home Depot",
+    homedepot: "Home Depot",
+    lowes: "Lowe's",
+    costco: "Costco",
+    ebay: "eBay",
+    newegg: "Newegg",
+    woot: "Woot",
+    bhphoto: "B&H Photo",
+    ador: "ADOR",
+    eufy: "Eufy",
+    belkin: "Belkin",
+    lenovo: "Lenovo",
+    overstock: "Overstock",
+    corsair: "Corsair",
+    ace_hardware: "Ace Hardware",
+  };
+  return (
+    map[retailer.toLowerCase()] ||
+    retailer.charAt(0).toUpperCase() + retailer.slice(1).replace(/_/g, " ")
+  );
+}
+
+function formatDeal(deal: ArbitrageDeal) {
+  const discount =
+    deal.historical_avg && deal.historical_avg > deal.buy_price
+      ? Math.round((1 - deal.buy_price / deal.historical_avg) * 100)
+      : 0;
+  const savings =
+    deal.historical_avg && deal.historical_avg > deal.buy_price
+      ? deal.historical_avg - deal.buy_price
+      : 0;
+  return { discount, savings };
+}
+
+async function fetchDeal(id: string): Promise<ArbitrageDeal> {
+  try {
+    return await getPublicDeal(id);
+  } catch {
+    notFound();
+  }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const deal = await fetchDeal(id);
+  const { discount, savings } = formatDeal(deal);
+  const retailer = retailerName(deal.retailer);
+
+  const title = discount
+    ? `${discount}% OFF ${deal.title} - Bargain Huntrs`
+    : `${deal.title} - Bargain Huntrs`;
+
+  const description = savings
+    ? `$${deal.buy_price.toFixed(2)} (was $${deal.historical_avg!.toFixed(2)}) at ${retailer}. Save $${savings.toFixed(2)}.`
+    : `$${deal.buy_price.toFixed(2)} at ${retailer}.`;
+
+  const image = deal.image_url || "/logos/profile-icon-dark.png";
+
+  return {
+    title,
+    description,
+    openGraph: {
+      type: "website",
+      url: `/deals/${id}`,
+      title,
+      description,
+      images: [image],
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: "@bargain4huntrs",
+      creator: "@bargain4huntrs",
+      title,
+      description,
+      images: [image],
+    },
+  };
+}
+
+export default async function DealPage({ params }: Props) {
+  const { id } = await params;
+  const deal = await fetchDeal(id);
+  const { discount, savings } = formatDeal(deal);
+  const retailer = retailerName(deal.retailer);
+
+  const dealUrl = addUtmParameters(
+    deal.buy_url || "",
+    "bargainhuntrs",
+    "deal_page",
+    "deal_detail"
+  );
+
+  return (
+    <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
+      <Header />
+
+      <main className="flex-1 px-6 py-10">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/deals"
+            className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ← Back to deals
+          </Link>
+
+          <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-col gap-6 sm:flex-row">
+              {deal.image_url ? (
+                <div className="relative aspect-square w-full max-w-[260px] flex-shrink-0 overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-800">
+                  <Image
+                    src={deal.image_url}
+                    alt={deal.title}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    sizes="260px"
+                  />
+                </div>
+              ) : (
+                <div className="flex aspect-square w-full max-w-[260px] items-center justify-center rounded-xl bg-zinc-50 text-6xl dark:bg-zinc-800">
+                  🏷️
+                </div>
+              )}
+
+              <div className="flex flex-1 flex-col">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="rounded-md bg-zinc-900 px-2 py-1 text-xs font-bold text-white dark:bg-zinc-50 dark:text-zinc-900">
+                    {retailer}
+                  </span>
+                  {discount > 0 && (
+                    <span className="rounded-md bg-red-500 px-2 py-1 text-xs font-bold text-white">
+                      {discount}% OFF
+                    </span>
+                  )}
+                </div>
+
+                <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-2xl">
+                  {deal.title}
+                </h1>
+
+                <div className="mt-4 flex items-baseline gap-3">
+                  <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
+                    ${deal.buy_price.toFixed(2)}
+                  </span>
+                  {deal.historical_avg && deal.historical_avg > deal.buy_price && (
+                    <span className="text-lg text-zinc-400 line-through">
+                      ${deal.historical_avg.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+
+                {savings > 0 && (
+                  <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    Save ${savings.toFixed(2)}
+                  </p>
+                )}
+
+                {dealUrl ? (
+                  <a
+                    href={dealUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-6 inline-flex w-fit items-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-emerald-700"
+                  >
+                    View Deal →
+                  </a>
+                ) : (
+                  <p className="mt-6 text-sm text-zinc-500">No purchase link available.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

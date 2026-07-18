@@ -1,15 +1,18 @@
+import random
+import string
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import bcrypt
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import User
+from app.db.models import User, ReferralClaim
 from app.services.niche_service import get_all_niches, get_niche
 from app.services.email_service import send_welcome_email, send_password_reset_email
 
@@ -24,6 +27,7 @@ class RegisterRequest(BaseModel):
     password: str
     firstName: str | None = None
     lastName: str | None = None
+    referralCode: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -45,6 +49,26 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+
+def _generate_referral_code(length: int = 8) -> str:
+    """Generate a short, unique alphanumeric referral code."""
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(random.choices(alphabet, k=length))
+
+
+def _compute_aura_tier(points: int) -> str:
+    """Compute Aura tier from total points."""
+    from app.routers.community import AURA_TIERS
+    for threshold, tier in AURA_TIERS:
+        if points >= threshold:
+            return tier
+    return "hunter"
+
+
+# Aura rewards for successful referrals
+AURA_REFERRER_BONUS = 100
+AURA_REFEREE_BONUS = 50
 
 
 def create_access_token(user_id: str) -> str:
@@ -93,6 +117,46 @@ async def register(body: RegisterRequest, db: Session = Depends(get_db)):
         last_name=body.lastName,
     )
     db.add(user)
+    db.flush()  # Get user.id before commit
+
+    # Generate a unique referral code for the new user
+    for _ in range(20):
+        code = _generate_referral_code()
+        if not db.query(User).filter(User.referral_code == code).first():
+            user.referral_code = code
+            break
+    if not user.referral_code:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to generate referral code")
+
+    # Process optional referral code used during signup
+    if body.referralCode:
+        ref_code = body.referralCode.strip().upper()
+        if ref_code == user.referral_code:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can't use your own referral code")
+
+        referrer = db.query(User).filter(
+            func.upper(User.referral_code) == ref_code,
+            User.is_active == True,
+        ).first()
+        if not referrer:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid referral code")
+
+        user.referred_by = referrer.id
+        user.aura_points = (user.aura_points or 0) + AURA_REFEREE_BONUS
+        user.aura_tier = _compute_aura_tier(user.aura_points)
+
+        referrer.referral_count = (referrer.referral_count or 0) + 1
+        referrer.aura_points = (referrer.aura_points or 0) + AURA_REFERRER_BONUS
+        referrer.aura_tier = _compute_aura_tier(referrer.aura_points)
+
+        claim = ReferralClaim(
+            referrer_id=referrer.id,
+            referee_id=user.id,
+            referral_code=referrer.referral_code,
+            points_awarded=AURA_REFERRER_BONUS,
+        )
+        db.add(claim)
+
     db.commit()
     db.refresh(user)
 

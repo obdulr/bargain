@@ -4,7 +4,7 @@ Notification API Router
 Endpoints for viewing notification history and testing channels.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.db.models import User, NotificationLog, ArbitrageDeal
 from app.routers.auth import get_current_user
 from app.services.notification_service import distribute_deal, DealInfo
+from app.services.niche_service import get_all_niches, get_niche
 from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
@@ -127,3 +128,154 @@ async def distribute_existing_deal(
     deal_info = DealInfo.from_deal(deal)
     results = await distribute_deal(deal_info, db)
     return TestNotificationResponse(results=results)
+
+
+# ─── Notification Preferences ───────────────────────────────────────────────
+
+class NotificationPreferencesResponse(BaseModel):
+    email_deal_alerts: bool
+    sms_deal_alerts: bool
+    discord_alerts: bool
+    telegram_alerts: bool
+    push_notifications: bool
+    weekly_digest: bool
+    glitch_alerts: bool
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    email_deal_alerts: Optional[bool] = None
+    sms_deal_alerts: Optional[bool] = None
+    discord_alerts: Optional[bool] = None
+    telegram_alerts: Optional[bool] = None
+    push_notifications: Optional[bool] = None
+    weekly_digest: Optional[bool] = None
+    glitch_alerts: Optional[bool] = None
+
+
+@router.get("/preferences", response_model=NotificationPreferencesResponse)
+async def get_notification_preferences(
+    current_user: User = Depends(get_current_user),
+):
+    """Return the current user's notification preferences."""
+    return NotificationPreferencesResponse(
+        email_deal_alerts=bool(current_user.email_deal_alerts),
+        sms_deal_alerts=bool(current_user.sms_deal_alerts),
+        discord_alerts=bool(current_user.discord_alerts),
+        telegram_alerts=bool(current_user.telegram_alerts),
+        push_notifications=bool(current_user.push_notifications),
+        weekly_digest=bool(current_user.weekly_digest),
+        glitch_alerts=bool(current_user.glitch_alerts),
+    )
+
+
+@router.put("/preferences", response_model=NotificationPreferencesResponse)
+async def update_notification_preferences(
+    body: NotificationPreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the current user's notification preferences.
+
+    SMS deal alerts require a Hunter subscription.
+    """
+    is_hunter = (current_user.subscription_tier or "").lower() == "hunter"
+
+    # SMS alerts are restricted to Hunter tier users.
+    if body.sms_deal_alerts is True and not is_hunter:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SMS deal alerts require a Hunter subscription.",
+        )
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(current_user, field, value)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return NotificationPreferencesResponse(
+        email_deal_alerts=bool(current_user.email_deal_alerts),
+        sms_deal_alerts=bool(current_user.sms_deal_alerts),
+        discord_alerts=bool(current_user.discord_alerts),
+        telegram_alerts=bool(current_user.telegram_alerts),
+        push_notifications=bool(current_user.push_notifications),
+        weekly_digest=bool(current_user.weekly_digest),
+        glitch_alerts=bool(current_user.glitch_alerts),
+    )
+
+
+# ─── Niche Subscriptions ────────────────────────────────────────────────────
+
+class NicheSubscriptionResponse(BaseModel):
+    available_niches: list[dict]
+    subscribed_niches: list[str]
+
+
+@router.get("/niches", response_model=NicheSubscriptionResponse)
+async def get_niche_subscriptions(
+    current_user: User = Depends(get_current_user),
+):
+    """Return all available niches and the current user's subscriptions."""
+    available = [
+        {
+            "key": n.key,
+            "name": n.display_name,
+            "emoji": n.emoji,
+            "description": n.description,
+            "typical_margin": n.typical_margin,
+        }
+        for n in get_all_niches()
+    ]
+    return NicheSubscriptionResponse(
+        available_niches=available,
+        subscribed_niches=current_user.subscribed_niches or [],
+    )
+
+
+@router.post("/niches/{niche}/subscribe")
+async def subscribe_to_niche(
+    niche: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Subscribe the current user to a specific niche."""
+    n = get_niche(niche)
+    if not n:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown niche: {niche}",
+        )
+
+    current_subs = set(current_user.subscribed_niches or [])
+    current_subs.add(niche)
+    current_user.subscribed_niches = list(current_subs)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {"success": True, "subscribed_niches": current_user.subscribed_niches or []}
+
+
+@router.delete("/niches/{niche}/unsubscribe")
+async def unsubscribe_from_niche(
+    niche: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Unsubscribe the current user from a specific niche."""
+    n = get_niche(niche)
+    if not n:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown niche: {niche}",
+        )
+
+    current_subs = set(current_user.subscribed_niches or [])
+    current_subs.discard(niche)
+    current_user.subscribed_niches = list(current_subs)
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {"success": True, "subscribed_niches": current_user.subscribed_niches or []}

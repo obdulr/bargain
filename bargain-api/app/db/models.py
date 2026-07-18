@@ -21,6 +21,16 @@ class User(Base):
     stripe_subscription_id = Column(String(255))
     refresh_token = Column(String(255))
     phone_number = Column(String(20))  # For SMS alerts (Hunter tier)
+
+    # Notification preferences
+    email_deal_alerts = Column(Boolean, default=True)
+    sms_deal_alerts = Column(Boolean, default=False)  # Hunter only
+    discord_alerts = Column(Boolean, default=False)
+    telegram_alerts = Column(Boolean, default=False)
+    push_notifications = Column(Boolean, default=False)
+    weekly_digest = Column(Boolean, default=True)
+    glitch_alerts = Column(Boolean, default=True)
+
     # WebAuthn / passkey fields
     credential_id = Column(String(255))
     public_key = Column(LargeBinary)
@@ -38,6 +48,12 @@ class User(Base):
     is_verified_seller = Column(Boolean, default=False)
     seller_store_name = Column(String(255))
     seller_website = Column(String(1000))
+
+    # Referral program
+    referral_code = Column(String(20), unique=True, nullable=True, index=True)
+    referred_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    referral_count = Column(Integer, default=0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -45,6 +61,8 @@ class User(Base):
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
     submitted_deals = relationship("UserSubmittedDeal", back_populates="user", cascade="all, delete-orphan")
+    referred_by_user = relationship("User", remote_side="User.id", foreign_keys=[referred_by])
+    referral_claims = relationship("ReferralClaim", foreign_keys="ReferralClaim.referrer_id", back_populates="referrer", cascade="all, delete-orphan")
 
     @property
     def full_name(self) -> str:
@@ -323,3 +341,18 @@ class SellerSubmission(Base):
     promoted_deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
     promoted_coupon_id = Column(UUID(as_uuid=True), ForeignKey("coupon_codes.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ReferralClaim(Base):
+    """Record of a user sign-up that came through another user's referral code."""
+    __tablename__ = "referral_claims"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    referrer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    referee_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    referral_code = Column(String(20), nullable=False)
+    points_awarded = Column(Integer, default=0)
+    claimed_at = Column(DateTime, default=datetime.utcnow)
+
+    referrer = relationship("User", foreign_keys=[referrer_id], back_populates="referral_claims")
+    referee = relationship("User", foreign_keys=[referee_id])

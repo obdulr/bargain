@@ -14,6 +14,7 @@ import {
   getMyNiches,
   updateMyNiches,
   updateMyPhone,
+  getReferralStats,
   type Niche,
 } from "@/lib/api";
 
@@ -47,6 +48,8 @@ export default function DashboardPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
   const [phoneSaved, setPhoneSaved] = useState(false);
+  const [referralCount, setReferralCount] = useState<number | null>(null);
+  const [referralAura, setReferralAura] = useState<number | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -61,6 +64,14 @@ export default function DashboardPage() {
       }).catch((err) => setError(err.message));
       loadItems();
       loadNiches();
+      getReferralStats(idToken)
+        .then((stats) => {
+          setReferralCount(stats.referral_count);
+          setReferralAura(stats.total_aura_earned);
+        })
+        .catch(() => {
+          // Non-critical
+        });
     }
   }, [user, loading, idToken, router]);
 
@@ -198,7 +209,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-6 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid gap-6 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Plan</h2>
             <p className="mt-2 text-2xl font-semibold capitalize text-zinc-900 dark:text-zinc-50">
@@ -213,6 +224,18 @@ export default function DashboardPage() {
             <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Alerts</h2>
             <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">0 new</p>
           </div>
+          <Link
+            href="/referrals"
+            className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6 transition-colors hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950 dark:hover:bg-indigo-900/40"
+          >
+            <h2 className="text-sm font-medium text-indigo-700 dark:text-indigo-400">Referrals</h2>
+            <p className="mt-2 text-2xl font-semibold text-indigo-900 dark:text-indigo-300">
+              {referralCount !== null ? referralCount : "—"} invites
+            </p>
+            <p className="mt-1 text-xs text-indigo-700 dark:text-indigo-400">
+              {referralAura !== null ? `${referralAura} Aura earned` : "Invite friends →"}
+            </p>
+          </Link>
           <Link
             href="/coupons"
             className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:hover:bg-emerald-900/40"
@@ -306,6 +329,22 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+
+        {/* Notification settings link */}
+        <Link
+          href="/settings/notifications"
+          className="mt-8 block rounded-2xl border border-blue-200 bg-blue-50 p-6 transition-colors hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:hover:bg-blue-900/40"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-blue-700 dark:text-blue-400">Notification Settings</h2>
+              <p className="mt-1 text-sm text-blue-900 dark:text-blue-300">
+                Manage alert channels, niches, and delivery preferences.
+              </p>
+            </div>
+            <span className="text-2xl font-semibold text-blue-900 dark:text-blue-300">→</span>
+          </div>
+        </Link>
 
         <div className="mt-12 rounded-2xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Add a product</h2>

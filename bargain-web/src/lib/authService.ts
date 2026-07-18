@@ -33,6 +33,7 @@ export interface RegisterData {
   password: string;
   firstName?: string;
   lastName?: string;
+  referralCode?: string;
 }
 
 function getStoredToken(): string | null {
