@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.db.models import User, UserSubmittedDeal, DealVote, ArbitrageDeal
 from app.routers.auth import get_current_user
 from app.services.email_service import send_deal_approved_email
+from app.services.deal_scorer import calculate_deal_score
 from app.services.niche_service import NICHES as NICHE_KEYS
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
@@ -399,6 +400,7 @@ async def moderate_deal(
             niche=niche,
         )
         db.add(promoted_deal)
+        promoted_deal.score = calculate_deal_score(promoted_deal)
         db.flush()  # Populate promoted_deal.id
         deal.promoted_deal_id = promoted_deal.id
 

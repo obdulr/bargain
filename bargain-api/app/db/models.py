@@ -149,6 +149,7 @@ class ArbitrageDeal(Base):
     category = Column(String(100))
     niche = Column(String(50), nullable=True, index=True)  # electronics, tools, etc.
     is_profitable = Column(Boolean, default=False)
+    score = Column(Numeric(10, 4), default=0)  # Composite deal quality score
     status = Column(String(50), default="active")  # active, alerted, expired, rejected
     detected_at = Column(DateTime, default=datetime.utcnow, index=True)
     alerted_at = Column(DateTime)

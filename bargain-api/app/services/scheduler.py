@@ -23,6 +23,7 @@ from app.db.models import ScanRun, User, ArbitrageDeal
 from app.services.arbitrage import scan_amazon_for_arbitrage, find_arbitrage_for_asin, ArbitrageOpportunity
 from app.services.profit_calculator import Platform
 from app.services.alert_service import create_alert_for_opportunity
+from app.services.deal_scorer import calculate_deal_score
 from app.services.notification_service import distribute_deal, DealInfo, get_sms_recipients, user_subscribed_to_niche
 
 logger = logging.getLogger(__name__)
@@ -86,19 +87,19 @@ class ScanScheduler:
 
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        # Start the deal scraping + X posting loop (every 2 hours)
+        # Start the deal scraping + X posting loop
         self._deal_task = asyncio.create_task(self._run_deal_scrape_loop())
         # Start the X engagement automation loop (every 30 minutes) if enabled
         if getattr(settings, "ENGAGEMENT_ENABLED", False):
             self._engagement_task = asyncio.create_task(self._run_engagement_loop())
             logger.info(
                 f"Scan scheduler started (interval: {self.interval_minutes}min, "
-                f"deal scrape: every 120min, engagement: every 30min)"
+                f"deal scrape: every {settings.POST_INTERVAL_MINUTES}min, engagement: every 30min)"
             )
         else:
             logger.info(
                 f"Scan scheduler started (interval: {self.interval_minutes}min, "
-                f"deal scrape: every 120min, engagement: disabled)"
+                f"deal scrape: every {settings.POST_INTERVAL_MINUTES}min, engagement: disabled)"
             )
         return True
 
@@ -146,14 +147,13 @@ class ScanScheduler:
         self._next_scan_at = None
 
     async def _run_deal_scrape_loop(self):
-        """Background loop that scrapes deals and posts to X every 2 hours.
+        """Background loop that scrapes deals and posts to X periodically.
 
         1. Scrapes Amazon Gold Box + RSS feeds (Slickdeals, TechBargains, etc.)
-        2. Posts top 3 new deals to X via Make.com webhook
-        3. Runs completely on the server — no computer or browser needed
+        2. Posts top deals to X via Buffer API (runs 24/7, no computer needed)
         """
-        DEAL_SCRAPE_INTERVAL = 120  # minutes
-        logger.info("Deal scrape + X posting loop started (every 120min)")
+        DEAL_SCRAPE_INTERVAL = settings.POST_INTERVAL_MINUTES  # minutes
+        logger.info(f"Deal scrape + X posting loop started (every {DEAL_SCRAPE_INTERVAL}min)")
 
         while self._running:
             try:
@@ -202,16 +202,16 @@ class ScanScheduler:
         self._last_deal_scrape_at = datetime.utcnow()
         logger.info("Starting deal scrape + X posting cycle...")
 
-        from app.services.amazon_deals_scraper import scrape_amazon_deals, save_deals_to_database
+        from app.services.amazon_deals_scraper import scrape_all_amazon_deals, save_deals_to_database
         from app.services.rss_deals_scraper import scrape_all_rss_feeds, save_rss_deals_to_database
         from app.services.impact_api import fetch_all_impact_deals, _is_configured as impact_configured
         from app.services.x_poster import post_deal_to_x, is_configured as x_configured
 
         db = SessionLocal()
         try:
-            # Scrape Amazon Gold Box
+            # Scrape Amazon (Gold Box, Today's Deals, Movers & Shakers, Hot New Releases)
             try:
-                amazon_deals = await scrape_amazon_deals(max_deals=50)
+                amazon_deals = await scrape_all_amazon_deals(max_deals_per_source=50)
                 amazon_saved = save_deals_to_database(amazon_deals, db)
                 logger.info(f"Amazon: {len(amazon_deals)} found, {amazon_saved} saved")
             except Exception as e:
@@ -266,6 +266,7 @@ class ScanScheduler:
                                 detected_at=datetime.utcnow(),
                             )
                             db.add(new_deal)
+                            new_deal.score = calculate_deal_score(new_deal)
                             db.commit()
                             impact_saved += 1
                         except Exception:
@@ -274,21 +275,74 @@ class ScanScheduler:
                 except Exception as e:
                     logger.error(f"Impact scrape failed: {e}")
 
+            # Expire deals older than 48 hours that haven't been posted
+            cutoff = datetime.utcnow() - timedelta(hours=48)
+            expired = db.query(ArbitrageDeal).filter(
+                ArbitrageDeal.status == "active",
+                ArbitrageDeal.alerted_at == None,
+                ArbitrageDeal.detected_at < cutoff,
+            ).update({ArbitrageDeal.status: "expired"}, synchronize_session=False)
+            if expired:
+                logger.info(f"Expired {expired} old unposted deals")
+                db.commit()
+
             # Post new deals to social media via Buffer API
             # ONLY post deals with affiliate tracking links
             if x_configured():
                 # Fetch more deals than needed, then filter for affiliate links
-                candidate_deals = (
-                    db.query(ArbitrageDeal)
-                    .filter(
-                        ArbitrageDeal.status == "active",
-                        ArbitrageDeal.is_profitable == True,
-                        ArbitrageDeal.alerted_at == None,
+                # Order by score (best first) with newest as a tiebreaker.
+                # The `score` column is being added in parallel; fall back to the
+                # old detected_at-only ordering if it doesn't exist yet.
+                try:
+                    candidate_deals = (
+                        db.query(ArbitrageDeal)
+                        .filter(
+                            ArbitrageDeal.status == "active",
+                            ArbitrageDeal.is_profitable == True,
+                            ArbitrageDeal.alerted_at == None,
+                        )
+                        .order_by(
+                            ArbitrageDeal.score.desc(),       # Best deals first
+                            ArbitrageDeal.detected_at.desc(),  # Newest as tiebreaker
+                        )
+                        .limit(20)
+                        .all()
                     )
-                    .order_by(ArbitrageDeal.detected_at.desc())
-                    .limit(20)
-                    .all()
-                )
+                except Exception:
+                    # score column doesn't exist yet — fall back to old ordering
+                    logger.info("score column not available, falling back to detected_at ordering")
+                    db.rollback()
+                    candidate_deals = (
+                        db.query(ArbitrageDeal)
+                        .filter(
+                            ArbitrageDeal.status == "active",
+                            ArbitrageDeal.is_profitable == True,
+                            ArbitrageDeal.alerted_at == None,
+                        )
+                        .order_by(ArbitrageDeal.detected_at.desc())
+                        .limit(20)
+                        .all()
+                    )
+
+                # Filter by minimum deal score (if the score attribute is present)
+                min_score = settings.MIN_DEAL_SCORE_TO_POST
+                scored_deals = []
+                for d in candidate_deals:
+                    deal_score = getattr(d, "score", None)
+                    if deal_score is None or float(deal_score) >= min_score:
+                        scored_deals.append(d)
+                candidate_deals = scored_deals
+
+                # Ensure retailer diversity — max 2 deals per retailer per cycle
+                retailer_counts = {}
+                diverse_deals = []
+                for d in candidate_deals:
+                    retailer = (d.retailer or d.buy_platform or "unknown").lower()
+                    if retailer_counts.get(retailer, 0) >= 2:
+                        continue
+                    retailer_counts[retailer] = retailer_counts.get(retailer, 0) + 1
+                    diverse_deals.append(d)
+                candidate_deals = diverse_deals
 
                 # Only post deals that have affiliate links
                 affiliate_domains = ["sjv.io", "7eer.net", "pxf.io", "evyy.net",
@@ -301,7 +355,7 @@ class ScanScheduler:
                     url = (d.buy_url or "").lower()
                     if any(x in url for x in affiliate_domains):
                         new_deals.append(d)
-                    if len(new_deals) >= 3:
+                    if len(new_deals) >= settings.MAX_DEALS_PER_CYCLE:
                         break
 
                 if new_deals:
@@ -337,6 +391,14 @@ class ScanScheduler:
                     logger.info(f"Posting complete: {posted}/{len(new_deals)} posted")
                 else:
                     logger.info("No new affiliate deals to post")
+
+                # Log posting metrics for this cycle
+                logger.info(
+                    f"Posting cycle complete: {len(new_deals)} posted, "
+                    f"{len(candidate_deals)} candidates, "
+                    f"{expired} expired. "
+                    f"Next cycle in {settings.POST_INTERVAL_MINUTES} min."
+                )
             else:
                 logger.info("Social posting not configured (BUFFER_API_KEY not set)")
 
@@ -470,6 +532,7 @@ def _save_opportunity(db, opp: ArbitrageOpportunity) -> ArbitrageDeal:
         status="active",
     )
     db.add(deal)
+    deal.score = calculate_deal_score(deal)
     db.commit()
     db.refresh(deal)
     return deal

@@ -323,6 +323,7 @@ def save_rss_deals_to_database(deals: list[RSSDeal], db_session) -> int:
     """Save RSS deals to the ArbitrageDeal table."""
     from app.db.models import ArbitrageDeal
     from app.services.affiliate_service import add_affiliate_tag
+    from app.services.deal_scorer import calculate_deal_score
     from decimal import Decimal as D
 
     saved = 0
@@ -386,6 +387,7 @@ def save_rss_deals_to_database(deals: list[RSSDeal], db_session) -> int:
                 detected_at=deal.posted_at or datetime.utcnow(),
             )
             db_session.add(new_deal)
+            new_deal.score = calculate_deal_score(new_deal)
             db_session.commit()
             saved += 1
 

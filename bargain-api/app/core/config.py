@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     AUTO_SCAN: bool = True
     SCAN_INTERVAL_MINUTES: int = 60
 
+    # Deal posting (X / social media)
+    MAX_DEALS_PER_CYCLE: int = 5          # Max deals posted per scrape cycle
+    POST_INTERVAL_MINUTES: int = 90       # How often the deal scrape + posting loop runs
+    MIN_DEAL_SCORE_TO_POST: float = 15.0  # Minimum deal score required to post
+
     # Coupon Scraping
     COUPON_AUTO_SCRAPE: bool = False
     COUPON_SCRAPE_INTERVAL_HOURS: int = 6
