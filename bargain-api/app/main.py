@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routers import auth, watchlist, waitlist, arbitrage, subscriptions, coupons, notifications, affiliate, community, gamification, seller, referrals
 from app.routers.alerts import router as alerts_router, scheduler_router
@@ -19,24 +20,34 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Add CORS middleware with fallback
-try:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-except Exception:
-    # Fallback if settings fail to load
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:3030", "https://www.bargainhuntrs.com"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Add CORS middleware — fail fast if ALLOWED_ORIGINS is misconfigured (no wildcard fallback)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security headers on all responses
+@app.middleware("HTTP")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+# Request body size limit (1MB) for non-file-upload endpoints
+@app.middleware("HTTP")
+async def limit_request_size(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 1_000_000:  # 1MB
+            return JSONResponse(status_code=413, content={"detail": "Request too large"})
+    return await call_next(request)
 
 app.include_router(auth.router)
 if _HAS_WEBAUTHN:
