@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bargain-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Syntax check
+        run: |
+          python -m py_compile app/main.py
+          python -m py_compile app/db/models.py
+          find app/ -name "*.py" | head -20 | xargs python -m py_compile
+      - name: Check migrations
+        run: |
+          python -c "import ast; import glob; [ast.parse(open(f).read()) for f in glob.glob('alembic/versions/*.py')]; print('All migrations OK')"
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        run: npm install -g pnpm
+      # The lockfile lives at the repo root (pnpm workspace), so install
+      # from the root with --frozen-lockfile, then run per-package commands
+      # with working-directory set.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        working-directory: bargain-web
+        run: pnpm exec tsc --noEmit
+      - name: Build
+        working-directory: bargain-web
+        run: pnpm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4030
