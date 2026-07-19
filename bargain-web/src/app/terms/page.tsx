@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "The terms that govern your use of the BargainHuntrs platform.",
 };
 
-const LAST_UPDATED = "July 1, 2025";
+const LAST_UPDATED = "July 16, 2026";
 
 export default function TermsPage() {
   return (

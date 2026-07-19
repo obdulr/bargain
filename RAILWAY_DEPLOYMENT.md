@@ -209,7 +209,7 @@ ALLOWED_ORIGINS=["https://your-frontend-url.railway.app","https://bargainhuntrs.
 
 - Check logs for build errors
 - Verify `NEXT_PUBLIC_API_URL` is set
-- Ensure port is set to `3000`
+- Ensure port is set to `3030`
 
 ### Database Connection Issues
 

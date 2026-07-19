@@ -32,7 +32,7 @@ except Exception:
     # Fallback if settings fail to load
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=["http://localhost:3030", "https://www.bargainhuntrs.com"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

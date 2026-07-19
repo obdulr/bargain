@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "How BargainHuntrs collects, uses, and protects your personal information.",
 };
 
-const LAST_UPDATED = "July 1, 2025";
+const LAST_UPDATED = "July 16, 2026";
 
 export default function PrivacyPage() {
   return (

@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BargainHuntrs Web
 
-## Getting Started
+The Next.js frontend for BargainHuntrs, an arbitrage intelligence platform.
 
-First, run the development server:
+## Required environment variables
+
+Copy `.env.example` to `.env.local` and fill in the values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- `NEXT_PUBLIC_API_URL` — URL of the BargainHuntrs API (e.g., `http://localhost:4030` for local development).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Optional:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — Stripe publishable key for checkout.
 
-## Learn More
+## Running the development server
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The dev server starts on [http://localhost:3030](http://localhost:3030).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Building for production
 
-## Deploy on Vercel
+```bash
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+To start the production server after building:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm start
+```
+
+## Linting
+
+```bash
+npm run lint
+```
+
+## Deployment notes
+
+- Make sure `NEXT_PUBLIC_API_URL` points to the deployed API before building.
+- This project can be deployed to Railway, Vercel, or any other Next.js-compatible host.
+- Do not commit `.env.local` or any secrets to version control.
+- The frontend expects the backend to expose CORS origins matching its public URL.
