@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#18181b" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Bargain Huntrs" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="impact-site-verification" content="c2aacb17-49a0-4116-b515-be1a7e596103" />
         <meta name="Impact-Site-Verification" content="c2aacb17-49a0-4116-b515-be1a7e596103" />
       </head>
@@ -64,6 +71,7 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>{children}</AuthProvider>
+        <PwaInstallPrompt />
       </body>
     </html>
   );
