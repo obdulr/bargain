@@ -18,35 +18,10 @@ os.environ.setdefault("AMAZON_ASSOCIATES_TAG", "bargainhuntrs-20")
 os.environ.setdefault("RESEND_API_KEY", "")  # console-only email in tests
 
 import pytest
-from sqlalchemy.orm import relationship, configure_mappers
 from fastapi.testclient import TestClient
 
 from app.db.session import get_db
-from app.db.models import User, UserSubmittedDeal
-
-# ── Fix pre-existing AmbiguousForeignKeysError ──────────────────────────
-# UserSubmittedDeal has two FKs to users (user_id + reviewed_by) but the
-# ``submitted_deals`` relationship doesn't specify which to use.  Re-declare
-# both sides with explicit foreign_keys so the mapper can configure cleanly.
-User.__mapper__.add_property(
-    "submitted_deals",
-    relationship(
-        "UserSubmittedDeal",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        foreign_keys=[UserSubmittedDeal.user_id],
-    ),
-)
-UserSubmittedDeal.__mapper__.add_property(
-    "user",
-    relationship(
-        "User",
-        back_populates="submitted_deals",
-        foreign_keys=[UserSubmittedDeal.user_id],
-    ),
-)
-configure_mappers()
-
+from app.db.models import User
 
 # ── Mock database session ──────────────────────────────────────────────
 class MockQuery:

@@ -60,7 +60,12 @@ class User(Base):
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
-    submitted_deals = relationship("UserSubmittedDeal", back_populates="user", cascade="all, delete-orphan")
+    submitted_deals = relationship(
+        "UserSubmittedDeal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="UserSubmittedDeal.user_id",
+    )
     referred_by_user = relationship("User", remote_side="User.id", foreign_keys=[referred_by])
     referral_claims = relationship("ReferralClaim", foreign_keys="ReferralClaim.referrer_id", back_populates="referrer", cascade="all, delete-orphan")
 
@@ -278,7 +283,7 @@ class UserSubmittedDeal(Base):
     promoted_deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
-    user = relationship("User", back_populates="submitted_deals")
+    user = relationship("User", back_populates="submitted_deals", foreign_keys=[user_id])
 
 
 class DealVote(Base):

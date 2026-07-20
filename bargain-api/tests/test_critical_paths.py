@@ -27,6 +27,11 @@ from app.services.amazon_deals_scraper import _deal_tier_for, AmazonDeal
 class TestAuthFlow:
     """Register → Login → Get profile, verifying JWT tokens throughout."""
 
+    def test_model_mappers_configure(self):
+        from sqlalchemy.orm import configure_mappers
+
+        configure_mappers()
+
     def test_register_returns_jwt_tokens(self, client, db_mock):
         """Registering a new user returns access + refresh JWT tokens."""
         db_mock.first_return = None  # no existing user
