@@ -21,6 +21,7 @@ export interface AuthResponse {
   expiresIn?: number;
   error?: string;
   message?: string;
+  status?: number;
 }
 
 export interface LoginData {
@@ -94,7 +95,7 @@ async function handleAuthResponse(response: Response): Promise<AuthResponse> {
     } else {
       errorMessage = json?.message || json?.error || "Server error. Please try again later.";
     }
-    return { success: false, error: errorMessage, message: errorMessage };
+    return { success: false, error: errorMessage, message: errorMessage, status: response.status };
   }
 
   const accessToken = json?.accessToken || json?.access_token;

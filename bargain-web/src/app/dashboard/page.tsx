@@ -15,7 +15,9 @@ import {
   updateMyNiches,
   updateMyPhone,
   getReferralStats,
+  getMyDeals,
   type Niche,
+  type MyDeal,
 } from "@/lib/api";
 
 interface UserData {
@@ -50,6 +52,7 @@ export default function DashboardPage() {
   const [phoneSaved, setPhoneSaved] = useState(false);
   const [referralCount, setReferralCount] = useState<number | null>(null);
   const [referralAura, setReferralAura] = useState<number | null>(null);
+  const [myDeals, setMyDeals] = useState<MyDeal[]>([]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -64,6 +67,7 @@ export default function DashboardPage() {
       }).catch((err) => setError(err.message));
       loadItems();
       loadNiches();
+      loadMyDeals();
       getReferralStats(idToken)
         .then((stats) => {
           setReferralCount(stats.referral_count);
@@ -74,6 +78,16 @@ export default function DashboardPage() {
         });
     }
   }, [user, loading, idToken, router]);
+
+  async function loadMyDeals() {
+    if (!idToken) return;
+    try {
+      const data = await getMyDeals(idToken);
+      setMyDeals(data);
+    } catch {
+      // Non-critical
+    }
+  }
 
   async function loadItems() {
     if (!idToken) return;
@@ -236,6 +250,15 @@ export default function DashboardPage() {
               {referralAura !== null ? `${referralAura} Aura earned` : "Invite friends →"}
             </p>
           </Link>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">My Deals</h2>
+            <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+              {myDeals.length} submitted
+            </p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {myDeals.filter((d) => d.status === "approved").length} approved
+            </p>
+          </div>
           <Link
             href="/coupons"
             className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:hover:bg-emerald-900/40"

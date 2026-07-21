@@ -7,6 +7,7 @@ Creates clean, scalable vector-based logos in all required sizes:
   - Instagram: 320x320 profile, 1080x1080 cover
 """
 import cairosvg
+import io
 import os
 from PIL import Image
 
@@ -22,6 +23,7 @@ EMERALD_LIGHT = "#34d399"
 DARK_BG = "#0a0a0b"
 DARK_BG2 = "#18181b"
 WHITE = "#ffffff"
+TRANSPARENT = (0, 0, 0, 0)
 ZINC_LIGHT = "#a1a1aa"
 ZINC_MUTED = "#71717a"
 
@@ -47,28 +49,28 @@ def svg_profile_icon(size=400):
     </filter>
   </defs>
 
-  <!-- Rounded square background -->
-  <rect x="0" y="0" width="400" height="400" rx="80" fill="url(#bg)"/>
+  <!-- Transparent background — no dark square -->
 
   <!-- Shopping bag with lightning bolt -->
   <g filter="url(#shadow)" transform="translate(0, 10)">
     <!-- Bag handles -->
     <path d="M 140 155 Q 140 110 170 110 Q 200 110 200 155"
-          stroke="#52525b" stroke-width="14" fill="none" stroke-linecap="round"/>
+          stroke="#ffffff" stroke-width="14" fill="none" stroke-linecap="round"/>
     <path d="M 200 155 Q 200 110 230 110 Q 260 110 260 155"
-          stroke="#52525b" stroke-width="14" fill="none" stroke-linecap="round"/>
+          stroke="#ffffff" stroke-width="14" fill="none" stroke-linecap="round"/>
 
     <!-- Bag body -->
     <rect x="120" y="155" width="160" height="170" rx="20" fill="url(#bag)"/>
 
-    <!-- Lightning bolt -->
-    <path d="M 215 175 L 175 245 L 200 245 L 180 305 L 235 220 L 210 220 L 230 175 Z"
+    <!-- Lightning bolt (centered original shape) -->
+    <path d="M 210 175 L 170 245 L 195 245 L 175 305 L 230 220 L 205 220 L 225 175 Z"
           fill="#ffffff"/>
   </g>
 
-  <!-- "BH" text -->
-  <text x="200" y="370" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
-        font-size="52" font-weight="bold" fill="#ffffff" letter-spacing="6">BH</text>
+  <text x="155" y="248" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="52" font-weight="bold" fill="#ffffff">B</text>
+  <text x="245" y="288" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="52" font-weight="bold" fill="#ffffff">H</text>
 </svg>"""
 
 
@@ -263,6 +265,48 @@ def render_svg(svg_string, output_name, width=None, height=None):
     return path
 
 
+def render_profile_cutout(output_name, size=400):
+    """Render the profile icon so B, lightning bolt, and H are transparent cutouts."""
+    bag_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 400 400">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#10b981" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M 140 165 Q 140 120 170 120 Q 200 120 200 165"
+          stroke="#10b981" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M 200 165 Q 200 120 230 120 Q 260 120 260 165"
+          stroke="#10b981" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <rect x="120" y="165" width="160" height="170" rx="20" fill="#10b981"/>
+  </g>
+</svg>"""
+    holes_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 400 400">
+  <rect x="0" y="0" width="400" height="400" fill="white"/>
+  <text x="148" y="248" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="58" font-weight="bold" fill="black">B</text>
+  <text x="252" y="288" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="58" font-weight="bold" fill="black">H</text>
+  <path d="M 210 185 L 170 255 L 195 255 L 175 315 L 230 230 L 205 230 L 225 185 Z"
+        fill="black"/>
+</svg>"""
+    bag_png = cairosvg.svg2png(
+        bytestring=bag_svg.encode("utf-8"), output_width=size, output_height=size
+    )
+    holes_png = cairosvg.svg2png(
+        bytestring=holes_svg.encode("utf-8"), output_width=size, output_height=size
+    )
+    bag = Image.open(io.BytesIO(bag_png)).convert("RGBA")
+    holes = Image.open(io.BytesIO(holes_png)).convert("L")
+    final = Image.new("RGBA", (size, size), TRANSPARENT)
+    final.paste(bag, (0, 0), holes)
+    path = os.path.join(OUT_DIR, output_name)
+    final.save(path)
+    size_kb = os.path.getsize(path) // 1024
+    print(f"  {output_name}: {size_kb}KB")
+    return path
+
+
 # ============================================================
 # Generate all assets
 # ============================================================
@@ -271,9 +315,9 @@ if __name__ == "__main__":
 
     # Profile icons (all sizes)
     print("Profile icons:")
-    render_svg(svg_profile_icon(400), "profile-icon-dark.png", 400, 400)
-    render_svg(svg_profile_icon(400), "profile-icon-facebook.png", 1080, 1080)
-    render_svg(svg_profile_icon(400), "profile-icon-instagram.png", 320, 320)
+    render_profile_cutout("profile-icon-dark.png", 400)
+    render_profile_cutout("profile-icon-facebook.png", 1080)
+    render_profile_cutout("profile-icon-instagram.png", 320)
 
     # Covers
     print("\nCover images:")

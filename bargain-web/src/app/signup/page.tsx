@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [referralCode, setReferralCode] = useState("");
@@ -27,12 +28,14 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setErrorStatus(null);
     setLoading(true);
     const result = await authService.register({ email, password, referralCode });
     if (result.success) {
       setRegistered(true);
     } else {
       setError(result.error || "Signup failed");
+      setErrorStatus(result.status ?? null);
     }
     setLoading(false);
   }
@@ -65,6 +68,13 @@ export default function SignupPage() {
             {error && (
               <div className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
                 {error}
+                {errorStatus === 409 && (
+                  <span className="ml-1">
+                    <Link href="/login" className="underline font-medium">
+                      Log in instead
+                    </Link>
+                  </span>
+                )}
               </div>
             )}
 

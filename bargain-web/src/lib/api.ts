@@ -561,6 +561,25 @@ export async function getMyAura(token: string) {
   }>;
 }
 
+export interface MyDeal {
+  id: string;
+  title: string;
+  retailer: string;
+  url: string;
+  sale_price: number | null;
+  original_price: number | null;
+  discount_percent: number | null;
+  status: string;
+  upvotes: number;
+  downvotes: number;
+  score: number;
+  created_at: string;
+}
+
+export async function getMyDeals(token: string) {
+  return fetchWithAuth("/api/v1/community/my-deals", token) as Promise<MyDeal[]>;
+}
+
 // ─── Referrals ───────────────────────────────────────────────────────────────
 
 export interface ReferralStats {

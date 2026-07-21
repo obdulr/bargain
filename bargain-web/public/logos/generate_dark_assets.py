@@ -119,15 +119,15 @@ def draw_shopping_bag_with_bolt(draw, cx, cy, scale=1.0, bag_color=None, bolt_co
     draw.arc([hcx2 - int(70 * s), hy - int(110 * s), hcx2 + int(70 * s), hy + int(30 * s)],
              start=180, end=360, fill=handle_color, width=hw)
 
-    # Lightning bolt (white) cut into bag
+    # Lightning bolt (white, centered between B and H)
     bolt_pts = [
-        (bx0 + int(175 * s), by0 + int(40 * s)),
-        (bx0 + int(120 * s), by0 + int(170 * s)),
-        (bx0 + int(165 * s), by0 + int(170 * s)),
-        (bx0 + int(130 * s), by0 + int(300 * s)),
-        (bx0 + int(230 * s), by0 + int(140 * s)),
-        (bx0 + int(180 * s), by0 + int(140 * s)),
-        (bx0 + int(215 * s), by0 + int(40 * s)),
+        (bx0 + int(160 * s), by0 + int(132 * s)),
+        (bx0 + int(145 * s), by0 + int(194 * s)),
+        (bx0 + int(160 * s), by0 + int(194 * s)),
+        (bx0 + int(145 * s), by0 + int(262 * s)),
+        (bx0 + int(175 * s), by0 + int(202 * s)),
+        (bx0 + int(160 * s), by0 + int(202 * s)),
+        (bx0 + int(175 * s), by0 + int(132 * s)),
     ]
     draw.polygon(bolt_pts, fill=bolt_color)
 
@@ -146,26 +146,17 @@ def profile_icon_dark():
     size = 400
     img = Image.new("RGBA", (size, size), TRANSPARENT)
 
-    # Dark gradient background
-    bg = Image.new("RGBA", (size, size), TRANSPARENT)
-    draw_vertical_gradient(bg, ZINC_DARK, ZINC_DARKER)
-
-    # Rounded square mask
-    mask = Image.new("RGBA", (size, size), TRANSPARENT)
-    md = ImageDraw.Draw(mask)
-    md.rounded_rectangle([0, 0, size, size], radius=80, fill=(255, 255, 255, 255))
-
+    # Transparent background
     img = Image.new("RGBA", (size, size), TRANSPARENT)
-    img.paste(bg, (0, 0), mask)
     d = ImageDraw.Draw(img)
 
     # Shopping bag with lightning bolt (shifted down so handles aren't cut)
     draw_shopping_bag_with_bolt(d, size // 2, size // 2 + 20, scale=0.65,
-                                handle_color=ZINC_LIGHT)
+                                handle_color=WHITE)
 
-    # "BH" text at bottom
-    font = find_font(50, bold=True)
-    draw_centered_text(d, size // 2, size - 60, "BH", WHITE, font, letter_spacing=4)
+    font = find_font(52, bold=True)
+    d.text((132, 185), "B", font=font, fill=WHITE)
+    d.text((237, 185), "H", font=font, fill=WHITE)
 
     return save(img, "profile-icon-dark.png")
 
