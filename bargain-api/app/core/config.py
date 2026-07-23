@@ -144,6 +144,11 @@ class Settings(BaseSettings):
     BUFFER_ORG_ID: str = ""
     BUFFER_MAX_QUEUE: int = 10         # Buffer free plan limit for scheduled posts
 
+    # Buffer daily publishing schedule (comma-separated HH:MM values)
+    BUFFER_POST_TIMES: str = "09:00,13:00,17:00"
+    BUFFER_POST_TIMEZONE: str = "America/New_York"
+    BUFFER_POSTS_PER_WINDOW: int = 1
+
     # Fallback image used when a deal has no/invalid image URL
     FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
 

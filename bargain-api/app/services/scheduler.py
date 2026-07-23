@@ -12,7 +12,8 @@ Flow:
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Optional
 import logging
@@ -79,6 +80,47 @@ class ScanScheduler:
             "last_engagement_at": self._last_engagement_at.isoformat() if self._last_engagement_at else None,
         }
 
+    def _get_post_times(self) -> list[time]:
+        """Parse BUFFER_POST_TIMES env into a list of datetime.time objects."""
+        post_times: list[time] = []
+        raw = getattr(settings, "BUFFER_POST_TIMES", "")
+        if not raw:
+            return post_times
+        for entry in raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            try:
+                hour, minute = map(int, entry.split(":"))
+                post_times.append(time(hour, minute))
+            except ValueError:
+                logger.warning(f"Invalid BUFFER_POST_TIMES entry: {entry}")
+        return post_times
+
+    def _seconds_until_next_post(self) -> int:
+        """Return the number of seconds until the next scheduled Buffer post."""
+        tz_name = getattr(settings, "BUFFER_POST_TIMEZONE", "America/New_York") or "America/New_York"
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = ZoneInfo("America/New_York")
+
+        now = datetime.now(tz)
+        post_times = sorted(self._get_post_times())
+        if not post_times:
+            # Fall back to the legacy interval-based posting if no times configured
+            return getattr(settings, "POST_INTERVAL_MINUTES", 90) * 60
+
+        for post_time in post_times:
+            candidate = datetime.combine(now.date(), post_time, tzinfo=tz)
+            if candidate > now:
+                return int((candidate - now).total_seconds())
+
+        # All times have passed today; wait until the first time tomorrow
+        tomorrow = now.date() + timedelta(days=1)
+        candidate = datetime.combine(tomorrow, post_times[0], tzinfo=tz)
+        return int((candidate - now).total_seconds())
+
     def start(self) -> bool:
         """Start the background scanner. Returns True if started, False if already running."""
         if self._running and self._task and not self._task.done():
@@ -94,12 +136,12 @@ class ScanScheduler:
             self._engagement_task = asyncio.create_task(self._run_engagement_loop())
             logger.info(
                 f"Scan scheduler started (interval: {self.interval_minutes}min, "
-                f"deal scrape: every {settings.POST_INTERVAL_MINUTES}min, engagement: every 30min)"
+                f"deal scrape: at {getattr(settings, 'BUFFER_POST_TIMES', '')} {getattr(settings, 'BUFFER_POST_TIMEZONE', 'ET')}, engagement: every 30min)"
             )
         else:
             logger.info(
                 f"Scan scheduler started (interval: {self.interval_minutes}min, "
-                f"deal scrape: every {settings.POST_INTERVAL_MINUTES}min, engagement: disabled)"
+                f"deal scrape: at {getattr(settings, 'BUFFER_POST_TIMES', '')} {getattr(settings, 'BUFFER_POST_TIMEZONE', 'ET')}, engagement: disabled)"
             )
         return True
 
@@ -147,26 +189,28 @@ class ScanScheduler:
         self._next_scan_at = None
 
     async def _run_deal_scrape_loop(self):
-        """Background loop that scrapes deals and posts to X periodically.
-
-        1. Scrapes Amazon Gold Box + RSS feeds (Slickdeals, TechBargains, etc.)
-        2. Posts top deals to X via Buffer API (runs 24/7, no computer needed)
-        """
-        DEAL_SCRAPE_INTERVAL = settings.POST_INTERVAL_MINUTES  # minutes
-        logger.info(f"Deal scrape + X posting loop started (every {DEAL_SCRAPE_INTERVAL}min)")
+        """Background loop that scrapes and posts one deal to Buffer at scheduled times."""
+        post_times = getattr(settings, "BUFFER_POST_TIMES", "")
+        timezone = getattr(settings, "BUFFER_POST_TIMEZONE", "America/New_York")
+        logger.info(f"Deal scrape + Buffer posting loop started (times: {post_times} {timezone})")
 
         while self._running:
+            sleep_seconds = self._seconds_until_next_post()
+            logger.info(f"Next Buffer post in {sleep_seconds}s")
+
+            try:
+                await asyncio.sleep(sleep_seconds)
+            except asyncio.CancelledError:
+                logger.info("Deal scrape loop cancelled")
+                break
+
+            if not self._running:
+                break
+
             try:
                 await self._scrape_and_post_to_x()
             except Exception as e:
                 logger.error(f"Deal scrape loop error: {e}", exc_info=True)
-
-            # Wait for next interval
-            try:
-                await asyncio.sleep(DEAL_SCRAPE_INTERVAL * 60)
-            except asyncio.CancelledError:
-                logger.info("Deal scrape loop cancelled")
-                break
 
     async def _run_engagement_loop(self):
         """Background loop that runs the X engagement bot every 30 minutes.
@@ -350,12 +394,16 @@ class ScanScheduler:
                     "ijrn.net", "jewn.net", "jyeh.net", "mtko.net", "tcux.net",
                     "zlvv.net", "goto.walmart.com", "affiliates.abebooks.com",
                     "tag=bargain0ae", "campid=", "affid="]
+                max_posts = min(
+                    getattr(settings, "MAX_DEALS_PER_CYCLE", 5),
+                    getattr(settings, "BUFFER_POSTS_PER_WINDOW", 1),
+                )
                 new_deals = []
                 for d in candidate_deals:
                     url = (d.buy_url or "").lower()
                     if any(x in url for x in affiliate_domains):
                         new_deals.append(d)
-                    if len(new_deals) >= settings.MAX_DEALS_PER_CYCLE:
+                    if len(new_deals) >= max_posts:
                         break
 
                 if new_deals:
