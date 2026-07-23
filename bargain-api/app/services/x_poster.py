@@ -27,7 +27,6 @@ from app.services.utm_service import add_utm_parameters
 logger = logging.getLogger(__name__)
 
 BUFFER_API_URL = "https://api.buffer.com/graphql"
-BUFFER_PENDING_URL = "https://api.buffer.com/1/pending.json"
 
 FALLBACK_IMAGE_URL = getattr(settings, "FALLBACK_IMAGE_URL", "") or \
     "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
@@ -57,29 +56,51 @@ async def _verify_image_url(url: str) -> bool:
         return False
 
 
-async def get_buffer_queue_count(api_key: str, channel_id: str) -> int:
-    """Query Buffer's REST API for the number of pending posts in the queue.
+async def get_buffer_queue_count(api_key: str, org_id: str, channel_ids: list[str]) -> int:
+    """Query Buffer's GraphQL API for the number of queued/scheduled posts."""
+    if not org_id or not channel_ids:
+        # Fail-open when org or channels are not configured
+        return 0
 
-    Uses Buffer's pending updates endpoint:
-      GET https://api.buffer.com/1/pending.json?access_token={api_key}
-
-    Returns the count of pending updates. On error, returns 0 so that
-    posting is still attempted (fail-open) rather than blocking forever.
+    query = """
+    query QueueCount($input: PostsInput!) {
+      posts(input: $input) {
+        edges { node { id } }
+      }
+    }
     """
+    variables = {
+        "input": {
+            "organizationId": org_id,
+            "filter": {
+                "status": "scheduled",
+                "channelIds": channel_ids,
+            },
+        }
+    }
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                BUFFER_PENDING_URL,
-                params={"access_token": api_key},
+            resp = await client.post(
+                BUFFER_API_URL,
+                json={"query": query, "variables": variables},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
             )
             if resp.status_code == 200:
                 data = resp.json()
-                # The endpoint returns a list of pending updates
-                updates = data if isinstance(data, list) else data.get("updates", [])
-                return len(updates)
+                if data.get("errors"):
+                    logger.warning(
+                        f"Buffer queue query error: {data['errors'][0].get('message', 'Unknown')}"
+                    )
+                    return 0
+                edges = data.get("data", {}).get("posts", {}).get("edges", [])
+                return len(edges)
             else:
                 logger.warning(
-                    f"Buffer pending API returned HTTP {resp.status_code}: {resp.text[:200]}"
+                    f"Buffer queue API returned HTTP {resp.status_code}: {resp.text[:200]}"
                 )
                 return 0
     except Exception as e:
@@ -356,8 +377,12 @@ async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> di
     # The Buffer free plan only allows 10 scheduled posts in the queue.
     # If the queue is full, skip posting to avoid silent failures.
     max_queue = getattr(settings, "BUFFER_MAX_QUEUE", 10)
-    primary_channel_id = channels[0][0]
-    queue_count = await get_buffer_queue_count(api_key, primary_channel_id)
+    channel_ids = [cid for cid, _ in channels]
+    queue_count = await get_buffer_queue_count(
+        api_key,
+        getattr(settings, "BUFFER_ORG_ID", ""),
+        channel_ids,
+    )
     if queue_count >= max_queue:
         logger.warning(
             f"Buffer queue full ({queue_count}/{max_queue}). Skipping post to avoid errors."
