@@ -35,22 +35,49 @@ FALLBACK_IMAGE_URL = getattr(settings, "FALLBACK_IMAGE_URL", "") or \
 async def _verify_image_url(url: str) -> bool:
     """Verify that an image URL is reachable and returns an image.
 
-    Does a HEAD request with a 5-second timeout. Returns True only if the
-    response status is 200 and the content-type starts with "image/".
+    Tries a lightweight HEAD request first, then falls back to a ranged GET
+    with a browser user-agent so retailer CDNs (Amazon, Walmart, etc.) don't
+    block us. Accepts the URL if the Content-Type is image/* or the path ends
+    with a known image extension and the request succeeds.
     """
     if not url:
         return False
+
+    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"}
+    clean_path = httpx.URL(url).path.split("?")[0].split("#")[0].lower()
+    has_image_ext = any(clean_path.endswith(ext) for ext in IMAGE_EXTENSIONS)
+
+    headers = {
+        "User-Agent": getattr(
+            settings, "USER_AGENT", "Mozilla/5.0 (compatible; BargainHuntrs/1.0)"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Range": "bytes=0-0",
+    }
+
     try:
-        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=10.0, follow_redirects=True, headers=headers
+        ) as client:
+            # HEAD first to avoid any download if the server supports it
             resp = await client.head(url)
-            if resp.status_code != 200:
-                logger.warning(f"Image verification failed (HTTP {resp.status_code}): {url}")
-                return False
-            content_type = resp.headers.get("content-type", "").lower()
-            if not content_type.startswith("image/"):
-                logger.warning(f"Image verification failed (content-type '{content_type}'): {url}")
-                return False
-            return True
+            if resp.status_code in (200, 206):
+                content_type = resp.headers.get("content-type", "").lower()
+                if content_type.startswith("image/"):
+                    return True
+                if not content_type and has_image_ext:
+                    return True
+
+            # Some hosts reject HEAD; use a ranged GET so we only pull 1 byte
+            async with client.stream("GET", url) as stream:
+                if stream.status_code in (200, 206):
+                    content_type = stream.headers.get("content-type", "").lower()
+                    if content_type.startswith("image/"):
+                        return True
+                    if not content_type and has_image_ext:
+                        return True
+
+            return False
     except Exception as e:
         logger.warning(f"Image verification error for {url}: {e}")
         return False
