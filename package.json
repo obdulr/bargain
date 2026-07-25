@@ -4,10 +4,6 @@
   "private": true,
   "description": "Arbitrage intelligence platform - Find it. Flip it. Profit.",
   "packageManager": "pnpm@9.15.5",
-  "workspaces": [
-    "bargain-web",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
