@@ -201,6 +201,7 @@ async def awin_discover(
             "display_url": prog.get("displayUrl"),
             "logo_url": prog.get("logoUrl"),
             "primary_region": prog.get("primaryRegion"),
+            "primary_sector": prog.get("primarySector"),
             "valid_domains": [
                 d.get("domain") for d in prog.get("validDomains", [])
                 if isinstance(d, dict)
@@ -208,4 +209,65 @@ async def awin_discover(
             "link_status": prog.get("linkStatus"),
             "status": prog.get("status"),
         })
+    return {"country": country, "count": len(results), "programmes": results}
+
+
+@router.get("/awin/recommend")
+async def awin_recommend(
+    country: str = "US",
+    sectors: str = "Retail & Shopping,Electronics,Home & Garden,Sports & Outdoors,Health & Beauty,Toys & Games,Pet Supplies,Food & Drink",
+    link_status: str = "online",
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+):
+    """Recommend Awin programmes worth joining for a deals/coupons site."""
+    target_sectors = {s.strip().lower() for s in sectors.split(",") if s.strip()}
+    want_link = link_status.lower() if link_status else ""
+
+    programmes = await fetch_awin_programmes(
+        relationship="notjoined",
+        country_code=country,
+    )
+
+    scored = []
+    for prog in programmes:
+        prog_sector = (prog.get("primarySector") or "").lower()
+        prog_link = (prog.get("linkStatus") or "").lower()
+        prog_status = (prog.get("status") or "").lower()
+        has_domains = bool(prog.get("validDomains"))
+
+        if target_sectors and prog_sector not in target_sectors:
+            continue
+        if want_link and prog_link != want_link:
+            continue
+        if prog_status != "active":
+            continue
+
+        score = 0
+        if prog_link == "online":
+            score += 3
+        if has_domains:
+            score += 2
+        if prog_sector in {"retail & shopping", "electronics"}:
+            score += 1
+
+        scored.append({
+            "id": prog.get("id"),
+            "name": prog.get("name"),
+            "description": (prog.get("description", "") or "")[:300],
+            "display_url": prog.get("displayUrl"),
+            "logo_url": prog.get("logoUrl"),
+            "primary_region": prog.get("primaryRegion"),
+            "primary_sector": prog.get("primarySector"),
+            "valid_domains": [
+                d.get("domain") for d in prog.get("validDomains", [])
+                if isinstance(d, dict)
+            ],
+            "link_status": prog.get("linkStatus"),
+            "status": prog.get("status"),
+            "score": score,
+        })
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    results = scored[:limit]
     return {"country": country, "count": len(results), "programmes": results}
