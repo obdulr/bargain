@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.db.models import AffiliateClick, ArbitrageDeal, User
 from app.routers.auth import get_current_user
+from app.services.affiliate_networks import fetch_awin_programmes
 from app.services.affiliate_service import add_affiliate_tag, detect_retailer
 
 logger = logging.getLogger(__name__)
@@ -174,3 +175,37 @@ async def click_stats(
         "converted": converted,
         "conversion_rate": round(conversion_rate, 2),
     }
+
+
+@router.get("/awin/discover")
+async def awin_discover(
+    country: str = "US",
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+):
+    """List Awin programmes the publisher has not yet joined.
+
+    Defaults to US notjoined programmes. Use `country` to filter by ISO
+    Alpha-2 country code (e.g. GB, DE, FR).
+    """
+    programmes = await fetch_awin_programmes(
+        relationship="notjoined",
+        country_code=country,
+    )
+    results = []
+    for prog in programmes[:limit]:
+        results.append({
+            "id": prog.get("id"),
+            "name": prog.get("name"),
+            "description": prog.get("description", "")[:300],
+            "display_url": prog.get("displayUrl"),
+            "logo_url": prog.get("logoUrl"),
+            "primary_region": prog.get("primaryRegion"),
+            "valid_domains": [
+                d.get("domain") for d in prog.get("validDomains", [])
+                if isinstance(d, dict)
+            ],
+            "link_status": prog.get("linkStatus"),
+            "status": prog.get("status"),
+        })
+    return {"country": country, "count": len(results), "programmes": results}

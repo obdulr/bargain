@@ -233,6 +233,41 @@ async def fetch_awin_promotions(max_results: int = 100) -> list[AffiliateDeal]:
     return deals
 
 
+async def fetch_awin_programmes(
+    relationship: str = "joined",
+    country_code: str = "",
+) -> list[dict]:
+    """Fetch Awin programme list for a given relationship.
+
+    Valid relationships: joined, pending, suspended, rejected, notjoined.
+    Optionally filter by ISO Alpha-2 country code (e.g. 'US').
+    """
+    if not _awin_configured():
+        logger.info("Awin not configured — skipping programme lookup")
+        return []
+
+    token = settings.AWIN_API_TOKEN
+    publisher_id = settings.AWIN_PUBLISHER_ID
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"{AWIN_API_BASE}/publishers/{publisher_id}/programmes"
+            params: dict[str, str] = {"accessToken": token}
+            if relationship:
+                params["relationship"] = relationship
+            if country_code:
+                params["countryCode"] = country_code
+
+            resp = await client.get(url, params=params)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning(f"Awin programmes API error: {resp.status_code}")
+    except Exception as e:
+        logger.error(f"Awin programmes fetch failed: {e}")
+
+    return []
+
+
 # ============================================================
 # CJ Affiliate
 # ============================================================
