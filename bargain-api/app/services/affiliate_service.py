@@ -4,8 +4,17 @@ Appends affiliate tracking parameters to retailer URLs so the platform
 earns commission on qualifying purchases. Falls back to plain URLs if
 affiliate IDs are not configured.
 """
+import time
 import urllib.parse
+from typing import Optional
+
+import httpx
+
 from app.core.config import settings
+
+_AWIN_CACHE_TTL_SECONDS = 300
+_awin_programmes_cache: Optional[list[dict]] = None
+_awin_cache_timestamp: Optional[float] = None
 
 
 def add_amazon_affiliate(url: str, asin: str = "") -> str:
@@ -61,6 +70,102 @@ def add_bestbuy_affiliate(url: str) -> str:
         return url
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}affid={settings.BESTBUY_AFFILIATE_ID}"
+
+
+def _normalize_domain(domain: str) -> str:
+    """Strip www and trailing slash from a domain for matching."""
+    d = domain.lower().strip().rstrip("/")
+    if d.startswith("www."):
+        d = d[4:]
+    return d
+
+
+def _get_url_domain(url: str) -> str:
+    """Extract normalized hostname from a URL."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return _normalize_domain(parsed.hostname or "")
+    except Exception:
+        return ""
+
+
+def _load_awin_programmes() -> list[dict]:
+    """Fetch and cache the Awin joined programmes list."""
+    global _awin_programmes_cache, _awin_cache_timestamp
+
+    token = getattr(settings, "AWIN_API_TOKEN", "")
+    publisher_id = getattr(settings, "AWIN_PUBLISHER_ID", "")
+    if not token or not publisher_id:
+        return []
+
+    now = time.time()
+    if _awin_programmes_cache is not None and _awin_cache_timestamp and (
+        now - _awin_cache_timestamp < _AWIN_CACHE_TTL_SECONDS
+    ):
+        return _awin_programmes_cache
+
+    try:
+        resp = httpx.get(
+            f"https://api.awin.com/publishers/{publisher_id}/programmes",
+            params={"accessToken": token, "relationship": "joined"},
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            _awin_programmes_cache = resp.json()
+            _awin_cache_timestamp = now
+            return _awin_programmes_cache
+    except Exception:
+        pass
+
+    return _awin_programmes_cache or []
+
+
+def _find_awin_advertiser_id(url: str) -> Optional[int]:
+    """Find the Awin advertiser ID whose domains match the URL."""
+    target_domain = _get_url_domain(url)
+    if not target_domain:
+        return None
+
+    programmes = _load_awin_programmes()
+    for prog in programmes:
+        prog_id = prog.get("id")
+        if not prog_id:
+            continue
+
+        domains: set[str] = set()
+        display_url = prog.get("displayUrl", "")
+        if display_url:
+            try:
+                domains.add(_normalize_domain(urllib.parse.urlparse(display_url).hostname or ""))
+            except Exception:
+                pass
+
+        for domain_entry in prog.get("validDomains", []):
+            domain = domain_entry.get("domain", "") if isinstance(domain_entry, dict) else domain_entry
+            if domain:
+                domains.add(_normalize_domain(domain))
+
+        if target_domain in domains:
+            return int(prog_id)
+
+    return None
+
+
+def add_awin_affiliate(url: str) -> str:
+    """Convert a URL into an Awin deeplink if the merchant is in a joined programme."""
+    publisher_id = getattr(settings, "AWIN_PUBLISHER_ID", "")
+    if not publisher_id:
+        return url
+
+    advertiser_id = _find_awin_advertiser_id(url)
+    if not advertiser_id:
+        return url
+
+    encoded = urllib.parse.quote(url, safe="")
+    return (
+        f"https://www.awin1.com/cread.php?"
+        f"awinmid={advertiser_id}&awinaffid={publisher_id}&p={encoded}"
+    )
 
 
 def detect_retailer(url: str) -> str:
@@ -123,4 +228,10 @@ def add_affiliate_tag(url: str, retailer: str = "", asin: str = "") -> str:
         return add_target_affiliate(url)
     if detected == "bestbuy":
         return add_bestbuy_affiliate(url)
+
+    # Fall back to Awin for any other joined merchant
+    awin_url = add_awin_affiliate(url)
+    if awin_url != url:
+        return awin_url
+
     return url
