@@ -29,7 +29,13 @@ logger = logging.getLogger(__name__)
 BUFFER_API_URL = "https://api.buffer.com/graphql"
 
 FALLBACK_IMAGE_URL = getattr(settings, "FALLBACK_IMAGE_URL", "") or \
-    "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
+    "https://www.bargainhuntrs.com/og-image.png"
+
+# Facebook's crawlers are frequently blocked by retailer CDNs (Amazon, Walmart,
+# etc.), causing "Missing or invalid image file" errors. For Facebook, always
+# use the branded fallback image instead of retailer deal images.
+FACEBOOK_FALLBACK_IMAGE_URL = getattr(settings, "FACEBOOK_FALLBACK_IMAGE_URL", "") or \
+    FALLBACK_IMAGE_URL
 
 
 async def _verify_image_url(url: str) -> bool:
@@ -316,16 +322,23 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
     # X/Twitter also gets images for better engagement
     # Verify the image URL before sending to Buffer; fall back to a branded
     # image if the deal image is missing or fails verification.
-    img_to_use = image_url
-    if img_to_use:
-        if not await _verify_image_url(img_to_use):
-            logger.warning(
-                f"Image verification failed for {service}, using fallback image"
-            )
-            img_to_use = FALLBACK_IMAGE_URL
+    #
+    # Facebook's crawlers are frequently blocked by retailer CDNs (Amazon,
+    # Walmart, etc.), so always use the branded fallback for Facebook to
+    # avoid "Missing or invalid image file" errors.
+    if service == "facebook":
+        img_to_use = FACEBOOK_FALLBACK_IMAGE_URL
     else:
-        # No image provided — use the branded fallback for all services
-        img_to_use = FALLBACK_IMAGE_URL
+        img_to_use = image_url
+        if img_to_use:
+            if not await _verify_image_url(img_to_use):
+                logger.warning(
+                    f"Image verification failed for {service}, using fallback image"
+                )
+                img_to_use = FALLBACK_IMAGE_URL
+        else:
+            # No image provided — use the branded fallback for all services
+            img_to_use = FALLBACK_IMAGE_URL
 
     if img_to_use:
         input_data["assets"] = [{"image": {"url": img_to_use}}]
