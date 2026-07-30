@@ -416,7 +416,7 @@ async def update_deal_images_public(
 
     Iterates through active deals without images and fetches them
     from Amazon product pages. Rate-limited to avoid blocking.
-    Keeps max_updates low to avoid Railway timeout.
+    Keeps max_updates low to avoid Render timeout.
     """
     from app.services.amazon_deals_scraper import update_missing_images
 

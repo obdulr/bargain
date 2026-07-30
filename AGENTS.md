@@ -11,4 +11,21 @@
 ## Package Manager
 
 - Backend (bargain-api): Python with pip, FastAPI
-- Frontend (bargain-web): Next.js with npm/pnpm
+- Frontend (bargain-web): Next.js with pnpm (NEVER use npm)
+
+## Deployment: Render ONLY
+
+**NEVER reference Railway.** The project has migrated from Railway to **Render** for both backend and frontend.
+
+- Backend: Render (Docker-based, Python 3.11, port 4030)
+- Frontend: Render (Next.js, port 3030)
+- Database: Render PostgreSQL
+- Backend URL: `https://api.bargainhuntrs.com`
+- Frontend URL: `https://bargain-web.onrender.com`
+- Configured via `Dockerfile` (backend) and `render.yaml` (frontend)
+- Render auto-deploys from `main` branch
+
+## SQL Logging
+
+- `SQL_ECHO` env var controls SQLAlchemy query logging (default: `false`)
+- **Never set `SQL_ECHO=true` in production** — it floods logs at ~500/sec and causes Render to drop scheduler/error messages

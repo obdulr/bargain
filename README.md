@@ -13,7 +13,7 @@ This is a monorepo built with:
 - **Storage**: Supabase (files/images)
 - **Payments**: Stripe
 - **Alerts**: Resend (email) + Firebase (SMS/push)
-- **Hosting**: Railway (backend) + Render (frontend)
+- **Hosting**: Render (backend + frontend)
 - **Monorepo Tooling**: Turborepo
 - **Package Manager**: pnpm 9.15.5 (PERMANENT - do not change)
 
@@ -38,7 +38,7 @@ bargain/
 - Node.js >= 24.0.0
 - pnpm >= 9.15.5 (PERMANENT - do not use npm)
 - Python >= 3.11
-- PostgreSQL (via Railway)
+- PostgreSQL (via Render)
 
 ### Installation
 
@@ -150,11 +150,11 @@ pnpm run format
 
 ### Backend (bargain-api)
 - **Framework**: FastAPI
-- **Database**: PostgreSQL (Railway)
+- **Database**: PostgreSQL (Render)
 - **ORM**: SQLAlchemy 2.0 (async)
 - **Authentication**: JWT (python-jose)
 - **Port**: 4030
-- **Deployment**: Railway
+- **Deployment**: Render
 - **Domain**: bargainhuntrs.com
 
 ### Integrations
@@ -205,12 +205,12 @@ pytest
 ## 📦 Deployment
 
 ### Current Deployment Architecture
-- **Backend**: Railway (bargainhuntrs.com:4030)
+- **Backend**: Render (api.bargainhuntrs.com:4030)
 - **Frontend**: Render (bargain-web.onrender.com:3030)
 - **Package Manager**: pnpm 9.15.5 (PERMANENT - never use npm)
 
-### Backend Deployment (Railway)
-The backend is already deployed on Railway at bargainhuntrs.com.
+### Backend Deployment (Render)
+The backend is deployed on Render at api.bargainhuntrs.com.
 
 **Configuration:**
 - Root Directory: `bargain-api`
@@ -245,7 +245,7 @@ The frontend is deployed on Render using the render.yaml configuration.
 **To update backend:**
 ```bash
 git push origin main
-# Railway auto-deploys from main branch
+# Render auto-deploys from main branch
 ```
 
 **To update frontend:**

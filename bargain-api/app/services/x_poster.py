@@ -5,7 +5,7 @@ Posts deals directly to Buffer, which posts them to:
   - Instagram (@bargainhuntrs)
   - Facebook (Bargain Huntrs)
 
-Runs 24/7 on the Railway server — no computer, browser, or Make.com needed.
+Runs 24/7 on the Render server — no computer, browser, or Make.com needed.
 
 Env vars:
   BUFFER_API_KEY      — Buffer API access token

@@ -1,55 +1,54 @@
 # Deployment Guide
 
-## ⚠️ CRITICAL: Package Manager
+## CRITICAL: Package Manager
 **PERMANENT RULE: Always use pnpm 9.15.5 - NEVER use npm**
 
 ## Current Deployment Architecture
 
 ```
-Frontend: Render (free tier)
+Frontend: Render
   - Next.js on port 3030
   - bargain-web.onrender.com
   - Configured via render.yaml
-  - Connects to Railway backend
 
-Backend: Railway (already deployed)
+Backend: Render
   - FastAPI on port 4030
-  - bargainhuntrs.com
-  - Configured via Dockerfile + railway.toml
-  - Railway PostgreSQL (future)
+  - api.bargainhuntrs.com
+  - Configured via Dockerfile
+  - Render PostgreSQL
 ```
 
-## Backend Deployment (Railway)
+## Backend Deployment (Render)
 
-### Status: ✅ Already Deployed
-The backend is currently deployed and operational at bargainhuntrs.com.
+### Status: Deployed
+The backend is deployed and operational at api.bargainhuntrs.com.
 
 ### Configuration
 - **Root Directory**: `bargain-api`
 - **Port**: 4030
-- **Domain**: bargainhuntrs.com
+- **Domain**: api.bargainhuntrs.com
 - **Dockerfile**: Root Dockerfile with Python 3.11
 - **Healthcheck**: `/health` endpoint
 
 ### Environment Variables
 - `PORT=4030`
-- `DATABASE_URL` (PostgreSQL connection string - to be added)
+- `DATABASE_URL` (Render PostgreSQL connection string)
+- `SQL_ECHO=false` (keep SQL logging off in production)
 
 ### To Update Backend
 ```bash
 git push origin main
-# Railway auto-deploys from main branch
+# Render auto-deploys from main branch
 ```
 
-### Railway Configuration Files
+### Render Configuration Files
 - `Dockerfile` - Python 3.11 FastAPI setup
-- `railway.toml` - Deployment configuration
-- Root directory set to `bargain-api` in Railway dashboard
+- Root directory set to `bargain-api` in Render dashboard
 
 ## Frontend Deployment (Render)
 
-### Status: ⏳ Being Configured
-The frontend is being deployed on Render using render.yaml.
+### Status: Deployed
+The frontend is deployed on Render.
 
 ### Configuration
 - **Root Directory**: `bargain-web`
@@ -58,7 +57,7 @@ The frontend is being deployed on Render using render.yaml.
 - **Start Command**: `cd bargain-web && pnpm start`
 
 ### Environment Variables
-- `NEXT_PUBLIC_API_URL=https://bargainhuntrs.com`
+- `NEXT_PUBLIC_API_URL=https://api.bargainhuntrs.com`
 - `NODE_VERSION=24`
 
 ### Render Configuration File
@@ -109,23 +108,21 @@ git push origin main
 ```
 
 ### 3. Automatic Deployment
-- **Railway**: Auto-deploys backend from main branch
-- **Render**: Auto-deploys frontend from main branch
-- Both platforms monitor the GitHub repository
+- **Render**: Auto-deploys backend and frontend from main branch
+- Both services monitor the GitHub repository
 
 ### 4. Monitor Deployment
-- **Railway**: Check Railway dashboard for backend status
-- **Render**: Check Render dashboard for frontend status
-- Both platforms provide real-time logs
+- **Render**: Check Render dashboard for backend and frontend status
+- Both services provide real-time logs
 
 ## Troubleshooting
 
 ### Backend Deployment Issues
 
 **Healthcheck Failing:**
-- Check port is set to 4030 in Railway dashboard
+- Check port is set to 4030 in Render dashboard
 - Verify `/health` endpoint exists in FastAPI app
-- Check Railway logs for startup errors
+- Check Render logs for startup errors
 
 **Database Connection Issues:**
 - Verify DATABASE_URL environment variable is set
@@ -167,29 +164,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 4030
 
 ### Production URLs
 - **Frontend**: https://bargain-web.onrender.com
-- **Backend**: https://bargainhuntrs.com
-- **API**: https://bargainhuntrs.com/health
-
-## Future Enhancements
-
-### Planned Additions
-- Railway PostgreSQL database for backend
-- Custom domain for frontend (bargainhuntrs.com)
-- CDN configuration for static assets
-- Monitoring and logging setup
-- CI/CD pipeline enhancements
-
-### Database Migration
-When adding Railway PostgreSQL:
-1. Create PostgreSQL service in Railway
-2. Add DATABASE_URL to backend environment variables
-3. Run Alembic migrations
-4. Update connection string in configuration
+- **Backend**: https://api.bargainhuntrs.com
+- **API**: https://api.bargainhuntrs.com/health
 
 ## Support
 
 For deployment issues:
-1. Check platform-specific logs (Railway/Render dashboards)
+1. Check Render dashboard logs
 2. Verify environment variables are correctly set
 3. Ensure pnpm is being used (not npm)
 4. Check port configurations (3030/4030)

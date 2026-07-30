@@ -4,13 +4,17 @@ from typing import List, Optional
 
 
 class Settings(BaseSettings):
-    # Database (Railway provides DATABASE_URL automatically)
+    # Database (Render provides DATABASE_URL automatically)
     DATABASE_URL: str = "sqlite:///./bargain.db"
-    
+
+    # SQL query logging — set to True only for local debugging. In production
+    # this floods logs at ~500/sec and causes Render to drop log messages.
+    SQL_ECHO: bool = False
+
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def convert_to_psycopg2(cls, v: str) -> str:
-        """Convert Railway's default postgresql:// URL to psycopg2 driver format.
+        """Convert Render's default postgresql:// URL to psycopg2 driver format.
 
         The codebase uses synchronous SQLAlchemy (create_engine/Session), so we
         normalize to the psycopg2 driver rather than asyncpg.
@@ -27,7 +31,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # CORS (Railway frontend URL will be added dynamically)
+    # CORS (Render frontend URL will be added dynamically)
     ALLOWED_ORIGINS: List[str] = ["*"]
     
     # Stripe
@@ -188,11 +192,11 @@ class Settings(BaseSettings):
         "video_games",
     ]
 
-    # Railway (set automatically)
+    # Render sets PORT automatically; Railway vars kept for backward compat
     PORT: int = 4030
-    RAILWAY_ENVIRONMENT: Optional[str] = None
-    RAILWAY_PROJECT_NAME: Optional[str] = None
-    RAILWAY_SERVICE_NAME: Optional[str] = None
+    RAILWAY_ENVIRONMENT: Optional[str] = None  # legacy, no longer used on Render
+    RAILWAY_PROJECT_NAME: Optional[str] = None  # legacy, no longer used on Render
+    RAILWAY_SERVICE_NAME: Optional[str] = None  # legacy, no longer used on Render
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 

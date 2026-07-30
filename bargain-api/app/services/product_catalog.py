@@ -4,7 +4,7 @@ Every ASIN in this catalog has been verified against Amazon.com product pages
 via web search. These are genuine products that resolve to working Amazon
 product pages when users click through.
 
-When the live Amazon scraper is blocked (which happens on Railway's IPs),
+When the live Amazon scraper is blocked (which happens on Render's IPs),
 this catalog provides the product data needed for arbitrage scanning.
 """
 

@@ -46,6 +46,6 @@ npm run lint
 ## Deployment notes
 
 - Make sure `NEXT_PUBLIC_API_URL` points to the deployed API before building.
-- This project can be deployed to Railway, Vercel, or any other Next.js-compatible host.
+- This project can be deployed to Render, Vercel, or any other Next.js-compatible host.
 - Do not commit `.env.local` or any secrets to version control.
 - The frontend expects the backend to expose CORS origins matching its public URL.
