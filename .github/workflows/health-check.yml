@@ -1,0 +1,25 @@
+name: Health Check
+
+on:
+  schedule:
+    # Every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    name: Check production endpoints
+    runs-on: ubuntu-latest
+    steps:
+      - name: API health
+        run: |
+          echo "Checking Bargain API..."
+          curl -sf -o /dev/null -w "%{http_code}\n" https://api.bargainhuntrs.com/health || echo "API health check failed"
+
+      - name: Web health
+        run: |
+          echo "Checking Bargain web..."
+          curl -sf -o /dev/null -w "%{http_code}\n" https://bargain-web.onrender.com || echo "Web health check failed"

@@ -4,24 +4,36 @@ on:
   schedule:
     # 9:00 AM, 1:00 PM, 5:00 PM ET (13:00, 17:00, 21:00 UTC during EDT)
     - cron: '0 13,17,21 * * *'
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   scrape-and-post:
+    name: Trigger scrape and post cycle
     runs-on: ubuntu-latest
     steps:
       - name: Trigger scrape + post cycle
         run: |
           echo "Triggering scrape + post cycle at $(date -u)"
+
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             --max-time 300 \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-max-time 60 \
             https://api.bargainhuntrs.com/api/v1/arbitrage/deals/scrape-all/public)
+
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
+
           echo "HTTP Status: $HTTP_CODE"
           echo "Response: $BODY"
+
           if [ "$HTTP_CODE" != "200" ]; then
             echo "ERROR: Scrape+post failed with HTTP $HTTP_CODE"
             exit 1
           fi
+
           echo "Scrape+post cycle completed successfully"
