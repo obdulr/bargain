@@ -212,6 +212,35 @@ async def scrape_amazon_deals_public(
         )
 
 
+@router.post("/deals/scrape-walmart/public", response_model=dict)
+async def scrape_walmart_deals_public(
+    max_deals: int = Query(50, le=100),
+    min_discount: int = Query(15, ge=0, le=90),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape Walmart's deals hub — no auth required.
+
+    Requires SCRAPER_PROXY_URL to be configured; Walmart drops connections
+    from unproxied cloud/datacenter IPs outright, so this returns
+    deals_found=0 (not an error) when no proxy is set.
+    """
+    from app.services.walmart_scraper import search_walmart_deals, save_walmart_deals_to_database
+
+    try:
+        deals = await search_walmart_deals(max_deals=max_deals, min_discount=min_discount, db_session=db)
+        saved = save_walmart_deals_to_database(deals, db)
+        return {
+            "deals_found": len(deals),
+            "deals_saved": saved,
+            "status": "success",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to scrape Walmart deals: {str(e)}",
+        )
+
+
 @router.post("/deals/scrape-slickdeals/public", response_model=dict)
 async def scrape_slickdeals_public(
     min_discount: int = Query(40, ge=0, le=90),
@@ -277,6 +306,21 @@ async def scrape_all_deals_public(
         results["total_saved"] += rss_saved
     except Exception as e:
         results["sources"]["rss_feeds"] = {"error": str(e)}
+
+    # Walmart direct scrape (only does anything if SCRAPER_PROXY_URL is set —
+    # see walmart_scraper.py docstring for why it's a hard requirement there)
+    try:
+        from app.services.walmart_scraper import search_walmart_deals, save_walmart_deals_to_database
+
+        walmart_deals = await search_walmart_deals(max_deals=50, db_session=db)
+        walmart_saved = save_walmart_deals_to_database(walmart_deals, db)
+        results["sources"]["walmart"] = {
+            "found": len(walmart_deals),
+            "saved": walmart_saved,
+        }
+        results["total_saved"] += walmart_saved
+    except Exception as e:
+        results["sources"]["walmart"] = {"error": str(e)}
 
     # Affiliate networks (only if configured)
     configured = get_configured_networks()

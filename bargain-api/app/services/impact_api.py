@@ -443,6 +443,57 @@ async def fetch_promo_codes() -> list[ImpactPromoCode]:
     return promos
 
 
+async def fetch_walmart_deals(min_discount: int = 15, max_products: int = 100) -> list[ImpactProduct]:
+    """Fetch discounted Walmart products specifically, bypassing the small-catalog cutoff.
+
+    ``fetch_discounted_products`` only scans catalogs with <= 50,000 items so it can
+    cheaply sample variety across many advertisers. Walmart's catalog has millions of
+    SKUs, so it's silently excluded by that cutoff and effectively never surfaces
+    through the generic path — this targets the Walmart campaign's catalog(s) directly
+    and paginates through them instead of skipping them for being "too big".
+    """
+    if not _is_configured():
+        return []
+
+    campaigns = await fetch_campaigns()
+    walmart_campaign_ids = {
+        c.campaign_id for c in campaigns if "walmart" in c.campaign_name.lower()
+    }
+    if not walmart_campaign_ids:
+        logger.info("Impact: no Walmart campaign found (program not joined/approved yet)")
+        return []
+
+    catalogs = await fetch_catalogs()
+    walmart_catalog_ids = [
+        c.get("Id") for c in catalogs
+        if str(c.get("CampaignId", "")) in walmart_campaign_ids and c.get("Id")
+    ]
+    if not walmart_catalog_ids:
+        logger.info("Impact: Walmart campaign has no product catalogs")
+        return []
+
+    discounted: list[ImpactProduct] = []
+    max_pages = 20  # up to 1,000 items per catalog (50/page) before giving up
+    for catalog_id in walmart_catalog_ids:
+        page = 1
+        while page <= max_pages and len(discounted) < max_products:
+            items = await fetch_catalog_items(catalog_id, page_size=50, page=page)
+            if not items:
+                break
+            for item in items:
+                if _is_localized_url(item.url):
+                    continue
+                if not (item.original_price and item.price and item.original_price > item.price):
+                    continue
+                discount = int(round((1 - float(item.price) / float(item.original_price)) * 100))
+                if discount >= min_discount:
+                    discounted.append(item)
+            page += 1
+
+    logger.info(f"Impact Walmart: {len(discounted)} discounted products found")
+    return discounted[:max_products]
+
+
 async def fetch_all_impact_deals() -> list[dict]:
     """Fetch all deals from Impact.com — campaigns, products, and catalogs.
 
@@ -452,6 +503,15 @@ async def fetch_all_impact_deals() -> list[dict]:
         return []
 
     products = await fetch_discounted_products(min_discount=20, max_products=50)
+
+    # Walmart's catalog is too large to be picked up by the generic small-catalog
+    # scan above, so it's fetched separately and merged in here.
+    try:
+        walmart_products = await fetch_walmart_deals(min_discount=15, max_products=50)
+        seen_urls = {p.url for p in products}
+        products.extend(p for p in walmart_products if p.url not in seen_urls)
+    except Exception as e:
+        logger.warning(f"Impact Walmart-specific fetch failed: {e}")
 
     deals = []
     filtered_count = 0

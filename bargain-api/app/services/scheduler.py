@@ -269,6 +269,17 @@ class ScanScheduler:
             except Exception as e:
                 logger.error(f"RSS scrape failed: {e}")
 
+            # Scrape Walmart directly (only does anything with SCRAPER_PROXY_URL set)
+            try:
+                from app.services.walmart_scraper import search_walmart_deals, save_walmart_deals_to_database
+
+                walmart_deals = await search_walmart_deals(max_deals=50, db_session=db)
+                walmart_saved = save_walmart_deals_to_database(walmart_deals, db)
+                if walmart_deals:
+                    logger.info(f"Walmart: {len(walmart_deals)} found, {walmart_saved} saved")
+            except Exception as e:
+                logger.error(f"Walmart scrape failed: {e}")
+
             # Scrape Impact.com product catalogs
             if impact_configured():
                 try:
