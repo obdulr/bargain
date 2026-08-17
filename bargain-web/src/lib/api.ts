@@ -1,4 +1,23 @@
+import { authService } from "@/lib/authService";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.bargainhuntrs.com";
+
+/** Clears the stale session and sends the user back to login.
+ *
+ * A 401 here always means the access token itself is invalid/expired or
+ * points at a user that no longer exists (e.g. "User not found" from
+ * get_current_user) -- never that a specific resource was denied. Without
+ * this, every authenticated page just threw and displayed the raw backend
+ * error text forever, since nothing ever cleared the broken localStorage
+ * session or redirected away from it.
+ */
+function handleUnauthorized() {
+  if (typeof window === "undefined") return;
+  authService.logout();
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
 
 async function fetchWithAuth(endpoint: string, token: string | null, options: RequestInit = {}) {
   const headers: Record<string, string> = {
@@ -17,6 +36,10 @@ async function fetchWithAuth(endpoint: string, token: string | null, options: Re
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: "Unknown error" }));
+    if (response.status === 401) {
+      handleUnauthorized();
+      throw new Error("Your session has expired. Please log in again.");
+    }
     throw new Error(error.detail || `Request failed with ${response.status}`);
   }
 
