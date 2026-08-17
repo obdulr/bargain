@@ -307,6 +307,17 @@ async def scrape_all_deals_public(
     except Exception as e:
         results["sources"]["rss_feeds"] = {"error": str(e)}
 
+    # Backfill missing deal images. This endpoint (update-images/public) has
+    # existed for a while but was never actually wired into any automated
+    # cycle before now, which is why the majority of deals had no image.
+    try:
+        from app.services.amazon_deals_scraper import update_missing_images
+
+        images_updated = await update_missing_images(db, max_updates=15)
+        results["images_updated"] = images_updated
+    except Exception as e:
+        results["images_updated_error"] = str(e)
+
     # Walmart direct scrape (only does anything if SCRAPER_PROXY_URL is set —
     # see walmart_scraper.py docstring for why it's a hard requirement there)
     try:
@@ -353,20 +364,34 @@ async def scrape_all_deals_public(
 
                     deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
 
-                    # Check for duplicates
-                    existing = db.query(ArbitrageDeal).filter(
-                        ArbitrageDeal.asin == deal_id,
-                        ArbitrageDeal.status == "active",
-                    ).first()
-                    if existing:
-                        continue
-
                     orig = deal.get("original_price") or 0
                     buy = deal.get("deal_price") or 0
                     if not buy or buy <= 0:
                         continue
 
                     tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
+
+                    # Refresh existing deals instead of skipping them — previously
+                    # a re-scraped Impact product was ignored entirely once first
+                    # inserted, so its price/timestamp froze forever even as the
+                    # actual price changed or the deal went stale.
+                    existing = db.query(ArbitrageDeal).filter(
+                        ArbitrageDeal.asin == deal_id,
+                        ArbitrageDeal.status == "active",
+                    ).first()
+                    if existing:
+                        existing.buy_price = buy
+                        existing.sell_price = orig if orig else buy
+                        existing.historical_avg = orig if orig else buy
+                        existing.image_url = deal.get("image_url") or existing.image_url
+                        existing.deal_tier = tier
+                        existing.net_profit = (orig - buy) if orig else 0
+                        existing.roi = float((orig - buy) / orig) if orig and orig > 0 else 0
+                        existing.detected_at = datetime.utcnow()
+                        db.commit()
+                        impact_saved += 1
+                        continue
+
                     new_deal = ArbitrageDeal(
                         asin=deal_id,
                         title=deal.get("title", "")[:500],
@@ -403,6 +428,34 @@ async def scrape_all_deals_public(
             results["total_saved"] += impact_saved
         except Exception as e:
             results["sources"]["impact"] = {"error": str(e)}
+
+    # Expire stale deals. Deals that were never posted expire after 48h;
+    # deals that WERE posted are otherwise exempt from expiration forever
+    # (see scheduler.py), so without this a posted deal's stale price could
+    # sit "active" on the public feed indefinitely. This endpoint is the
+    # most reliably-triggered path in production (via the buffer-poster
+    # GitHub Action cron), so the cleanup lives here too, not just in the
+    # in-process scheduler loop which only runs while the dyno is awake.
+    try:
+        unposted_cutoff = datetime.utcnow() - timedelta(hours=48)
+        unposted_expired = db.query(ArbitrageDeal).filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.alerted_at == None,
+            ArbitrageDeal.detected_at < unposted_cutoff,
+        ).update({ArbitrageDeal.status: "expired"}, synchronize_session=False)
+
+        stale_cutoff = datetime.utcnow() - timedelta(days=7)
+        stale_expired = db.query(ArbitrageDeal).filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.detected_at < stale_cutoff,
+        ).update({ArbitrageDeal.status: "expired"}, synchronize_session=False)
+
+        if unposted_expired or stale_expired:
+            db.commit()
+        results["expired"] = {"unposted": unposted_expired, "stale": stale_expired}
+    except Exception as e:
+        db.rollback()
+        results["expire_error"] = str(e)
 
     # Auto-post new deals to X via Make.com (if configured)
     from app.services.x_poster import is_configured as x_configured

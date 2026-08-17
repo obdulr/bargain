@@ -330,6 +330,18 @@ class ScanScheduler:
             except Exception as e:
                 logger.error(f"RSS scrape failed: {e}")
 
+            # Backfill images for deals that are missing them (this previously
+            # only ran if someone manually hit /deals/update-images/public —
+            # it was never actually wired into any automated cycle).
+            try:
+                from app.services.amazon_deals_scraper import update_missing_images
+
+                images_updated = await update_missing_images(db, max_updates=15)
+                if images_updated:
+                    logger.info(f"Backfilled {images_updated} missing deal images")
+            except Exception as e:
+                logger.error(f"Image backfill failed: {e}")
+
             # Scrape Walmart directly (only does anything with SCRAPER_PROXY_URL set)
             try:
                 from app.services.walmart_scraper import search_walmart_deals, save_walmart_deals_to_database
@@ -351,17 +363,31 @@ class ScanScheduler:
                             if not deal.get("deal_price") or not deal.get("title"):
                                 continue
                             deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
-                            existing = db.query(ArbitrageDeal).filter(
-                                ArbitrageDeal.asin == deal_id,
-                                ArbitrageDeal.status == "active",
-                            ).first()
-                            if existing:
-                                continue
                             orig = deal.get("original_price") or 0
                             buy = deal.get("deal_price") or 0
                             if not buy or buy <= 0:
                                 continue
                             tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
+
+                            # Refresh existing deals instead of skipping — see
+                            # matching fix in routers/arbitrage.py scrape-all/public.
+                            existing = db.query(ArbitrageDeal).filter(
+                                ArbitrageDeal.asin == deal_id,
+                                ArbitrageDeal.status == "active",
+                            ).first()
+                            if existing:
+                                existing.buy_price = buy
+                                existing.sell_price = orig if orig else buy
+                                existing.historical_avg = orig if orig else buy
+                                existing.image_url = deal.get("image_url") or existing.image_url
+                                existing.deal_tier = tier
+                                existing.net_profit = (orig - buy) if orig else 0
+                                existing.roi = float((orig - buy) / orig) if orig and orig > 0 else 0
+                                existing.detected_at = datetime.utcnow()
+                                db.commit()
+                                impact_saved += 1
+                                continue
+
                             new_deal = ArbitrageDeal(
                                 asin=deal_id,
                                 title=deal.get("title", "")[:500],
@@ -400,6 +426,19 @@ class ScanScheduler:
             ).update({ArbitrageDeal.status: "expired"}, synchronize_session=False)
             if expired:
                 logger.info(f"Expired {expired} old unposted deals")
+                db.commit()
+
+            # Deals that WERE posted are otherwise exempt from expiration
+            # forever, so a deal posted once could sit "active" with a
+            # stale price on the public feed indefinitely. Give posted
+            # deals a much longer, but still finite, lifetime.
+            stale_cutoff = datetime.utcnow() - timedelta(days=7)
+            stale_expired = db.query(ArbitrageDeal).filter(
+                ArbitrageDeal.status == "active",
+                ArbitrageDeal.detected_at < stale_cutoff,
+            ).update({ArbitrageDeal.status: "expired"}, synchronize_session=False)
+            if stale_expired:
+                logger.info(f"Expired {stale_expired} stale deals (>7 days old)")
                 db.commit()
 
             # Post new deals to social media via Buffer API
