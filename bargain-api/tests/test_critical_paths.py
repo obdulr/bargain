@@ -14,11 +14,15 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from decimal import Decimal
+
 from app.routers.auth import create_access_token, create_refresh_token
 from app.services.deal_scorer import calculate_deal_score
 from app.services.affiliate_service import add_amazon_affiliate
 from app.services.utm_service import add_utm_parameters
 from app.services.amazon_deals_scraper import _deal_tier_for, AmazonDeal
+from app.services.resale_pricing import compute_suggested_price
+from app.db.models import ResaleListing
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -339,3 +343,96 @@ class TestDealTierClassification:
         """Coupon deals fall through to 'clearance'."""
         deal = AmazonDeal(asin="B123", title="Test", deal_price=10, deal_type="coupon")
         assert _deal_tier_for(deal) == "clearance"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 6. RESALE PRICING ASSISTANT
+# ════════════════════════════════════════════════════════════════════════
+class TestResalePricingLogic:
+    """Verify compute_suggested_price's repricing decisions (pure function)."""
+
+    def test_undercuts_when_market_drops(self):
+        price, reason = compute_suggested_price(Decimal("50.00"), Decimal("40.00"), Decimal("20.00"))
+        assert price == Decimal("39.99")
+        assert "lower" in reason.lower()
+
+    def test_raises_when_market_rises(self):
+        price, reason = compute_suggested_price(Decimal("50.00"), Decimal("65.00"), Decimal("20.00"))
+        assert price == Decimal("64.99")
+        assert "raise" in reason.lower()
+
+    def test_no_change_within_threshold(self):
+        price, reason = compute_suggested_price(Decimal("50.00"), Decimal("50.20"), Decimal("20.00"))
+        assert price is None
+        assert "competitive" in reason.lower()
+
+    def test_never_suggests_below_floor(self):
+        price, reason = compute_suggested_price(Decimal("50.00"), Decimal("15.00"), Decimal("20.00"))
+        assert price == Decimal("20.00")
+
+    def test_no_data_returns_none(self):
+        price, reason = compute_suggested_price(Decimal("50.00"), None, Decimal("20.00"))
+        assert price is None
+        assert "no competitor" in reason.lower()
+
+
+class TestResaleListingEndpoints:
+    """Create → refresh → update → delete a resale listing through the API."""
+
+    def test_full_resale_flow(self, client, db_mock):
+        # Register to get a real user + token via the standard flow.
+        db_mock.first_return = None
+        with patch("app.routers.auth.send_welcome_email"):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "reseller@test.com",
+                    "password": "SecretPass123!",
+                    "firstName": "Re",
+                    "lastName": "Seller",
+                },
+            )
+        assert resp.status_code == 200, resp.text
+        access_token = resp.json()["accessToken"]
+        user = db_mock.added[0]
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        # Create a resale listing. get_current_user needs the User lookup;
+        # the free-tier count check needs ResaleListing.count() -> 0.
+        db_mock.reset()
+        db_mock.first_return = user
+        db_mock.all_return_for(ResaleListing, [])
+        resp = client.post(
+            "/api/v1/resale",
+            json={"title": "Test Flip Item", "our_price": 50.0, "buy_price": 30.0},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        listing = db_mock.added[-1]
+        assert resp.json()["title"] == "Test Flip Item"
+
+        # Refresh pricing — mock the market price lookup so this doesn't hit the network.
+        db_mock.reset()
+        db_mock.first_return = user
+        db_mock.first_return_for(ResaleListing, listing)
+        with patch("app.services.resale_pricing.get_ebay_market_price", return_value=Decimal("40.00")):
+            resp = client.post(f"/api/v1/resale/{listing.id}/refresh", headers=headers)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["competitor_price"] == 40.0
+        assert data["suggested_price"] == 39.99
+
+        # Update our price.
+        db_mock.reset()
+        db_mock.first_return = user
+        db_mock.first_return_for(ResaleListing, listing)
+        resp = client.patch(f"/api/v1/resale/{listing.id}", json={"our_price": 40.0}, headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["our_price"] == 40.0
+
+        # Delete it.
+        db_mock.reset()
+        db_mock.first_return = user
+        db_mock.first_return_for(ResaleListing, listing)
+        resp = client.delete(f"/api/v1/resale/{listing.id}", headers=headers)
+        assert resp.status_code == 204

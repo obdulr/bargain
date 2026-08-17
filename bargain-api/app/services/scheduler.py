@@ -50,6 +50,8 @@ class ScanScheduler:
         self._last_error: Optional[str] = None
         self._last_deal_scrape_at: Optional[datetime] = None
         self._last_engagement_at: Optional[datetime] = None
+        self._resale_reprice_task: Optional[asyncio.Task] = None
+        self._last_resale_reprice_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:
@@ -78,6 +80,7 @@ class ScanScheduler:
             "last_error": self._last_error,
             "last_deal_scrape_at": self._last_deal_scrape_at.isoformat() if self._last_deal_scrape_at else None,
             "last_engagement_at": self._last_engagement_at.isoformat() if self._last_engagement_at else None,
+            "last_resale_reprice_at": self._last_resale_reprice_at.isoformat() if self._last_resale_reprice_at else None,
         }
 
     def _get_post_times(self) -> list[time]:
@@ -131,6 +134,8 @@ class ScanScheduler:
         self._task = asyncio.create_task(self._run_loop())
         # Start the deal scraping + X posting loop
         self._deal_task = asyncio.create_task(self._run_deal_scrape_loop())
+        # Start the resale repricing loop (once/day)
+        self._resale_reprice_task = asyncio.create_task(self._run_resale_reprice_loop())
         # Start the X engagement automation loop (every 30 minutes) if enabled
         if getattr(settings, "ENGAGEMENT_ENABLED", False):
             self._engagement_task = asyncio.create_task(self._run_engagement_loop())
@@ -158,6 +163,8 @@ class ScanScheduler:
             self._deal_task.cancel()
         if self._engagement_task and not self._engagement_task.done():
             self._engagement_task.cancel()
+        if self._resale_reprice_task and not self._resale_reprice_task.done():
+            self._resale_reprice_task.cancel()
         self._next_scan_at = None
         logger.info("Scan scheduler stopped")
         return True
@@ -240,6 +247,60 @@ class ScanScheduler:
             except asyncio.CancelledError:
                 logger.info("Engagement loop cancelled")
                 break
+
+    async def _run_resale_reprice_loop(self):
+        """Background loop that refreshes resale pricing suggestions once/day."""
+        RESALE_INTERVAL_HOURS = 24
+        logger.info("Resale repricing loop started (every 24h)")
+
+        while self._running:
+            try:
+                await self._refresh_resale_listings()
+                self._last_resale_reprice_at = datetime.utcnow()
+            except Exception as e:
+                logger.error(f"Resale repricing loop error: {e}", exc_info=True)
+
+            try:
+                await asyncio.sleep(RESALE_INTERVAL_HOURS * 3600)
+            except asyncio.CancelledError:
+                logger.info("Resale repricing loop cancelled")
+                break
+
+    async def _refresh_resale_listings(self):
+        """Recheck market price for every active resale listing and create an
+        Alert when a meaningful price change is suggested."""
+        from app.db.models import ResaleListing, Alert
+        from app.services.resale_pricing import refresh_resale_listing_price
+
+        db = SessionLocal()
+        try:
+            listings = db.query(ResaleListing).filter(ResaleListing.status == "active").all()
+            logger.info(f"Resale repricing: checking {len(listings)} active listings")
+
+            for listing in listings:
+                try:
+                    result = await refresh_resale_listing_price(listing)
+                    listing.competitor_price = result.competitor_price
+                    listing.suggested_price = result.suggested_price
+                    listing.suggestion_reason = result.reason
+                    listing.last_checked_at = result.checked_at
+                    db.commit()
+
+                    if result.suggested_price is not None:
+                        alert = Alert(
+                            user_id=listing.user_id,
+                            type="resale_reprice",
+                            title=f"Price suggestion: {listing.title[:100]}",
+                            description=result.reason,
+                            status="pending",
+                        )
+                        db.add(alert)
+                        db.commit()
+                except Exception as e:
+                    logger.warning(f"Resale reprice failed for listing {listing.id}: {e}")
+                    db.rollback()
+        finally:
+            db.close()
 
     async def _scrape_and_post_to_x(self):
         """Scrape deals from all sources and post new ones to X via Buffer API."""

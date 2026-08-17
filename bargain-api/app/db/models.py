@@ -60,6 +60,7 @@ class User(Base):
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     watchlist_items = relationship("WatchlistItem", back_populates="user", cascade="all, delete-orphan")
+    resale_listings = relationship("ResaleListing", back_populates="user", cascade="all, delete-orphan")
     submitted_deals = relationship(
         "UserSubmittedDeal",
         back_populates="user",
@@ -132,6 +133,41 @@ class WatchlistItem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="watchlist_items")
+
+
+class ResaleListing(Base):
+    """A resale pricing assistant entry.
+
+    Tracks an item a user bought (typically via an ArbitrageDeal) to flip on
+    a resale platform (eBay, etc.), and periodically compares their asking
+    price against competitor pricing to suggest an adjustment — the same
+    idea as a marketplace "repricer," applied to arbitrage resale rather
+    than an existing seller catalog.
+    """
+    __tablename__ = "resale_listings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    source_deal_id = Column(UUID(as_uuid=True), ForeignKey("arbitrage_deals.id"), nullable=True)
+
+    title = Column(String(500), nullable=False)
+    search_query = Column(String(500))  # query used to find comps, defaults to title
+    sell_platform = Column(String(50), default="ebay")
+
+    buy_price = Column(Numeric(10, 2))  # what the user paid (for margin protection)
+    our_price = Column(Numeric(10, 2), nullable=False)  # current asking price
+    min_price = Column(Numeric(10, 2))  # floor — never suggest going below this
+
+    competitor_price = Column(Numeric(10, 2))  # last-seen market/competitor price
+    suggested_price = Column(Numeric(10, 2))  # our recommended new price
+    suggestion_reason = Column(String(255))
+
+    status = Column(String(20), default="active")  # active, sold, archived
+    last_checked_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="resale_listings")
 
 
 class WaitlistEntry(Base):

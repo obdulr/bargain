@@ -71,14 +71,34 @@ class MockDBSession:
 
     Tracks objects added via ``add`` so that ``flush`` can assign default
     attributes (``id``, ``is_active``) that the real database would set.
+
+    ``query(Model)`` returns a per-model ``MockQuery`` so that endpoints
+    which look up more than one model in a single request (e.g. the current
+    user via ``get_current_user`` *and* a separate resource by id) can be
+    configured independently via ``first_return_for(Model)``. The shared
+    ``first_return``/``all_return`` properties remain as a convenience for
+    the common single-model case and are backed by the ``User`` query.
     """
 
     def __init__(self):
-        self._query = MockQuery()
+        self._query = MockQuery()  # backward-compatible default (acts as User's query)
+        self._queries_by_model = {}
         self.added = []
 
     def query(self, model=None):
-        return self._query
+        if model is None or model is User:
+            return self._query
+        if model not in self._queries_by_model:
+            self._queries_by_model[model] = MockQuery()
+        return self._queries_by_model[model]
+
+    def first_return_for(self, model, value):
+        """Configure the ``.first()`` result for a specific model's query."""
+        self.query(model)._first = value
+
+    def all_return_for(self, model, value):
+        """Configure the ``.all()`` result for a specific model's query."""
+        self.query(model)._all = value
 
     def add(self, obj):
         self.added.append(obj)
@@ -88,14 +108,17 @@ class MockDBSession:
 
     def flush(self, *args, **kwargs):
         for obj in self.added:
-            if isinstance(obj, User):
-                if getattr(obj, "id", None) is None:
-                    obj.id = uuid.uuid4()
-                if getattr(obj, "is_active", None) is None:
-                    obj.is_active = True
+            if getattr(obj, "id", None) is None and hasattr(obj, "id"):
+                obj.id = uuid.uuid4()
+            if isinstance(obj, User) and getattr(obj, "is_active", None) is None:
+                obj.is_active = True
 
     def commit(self, *args, **kwargs):
-        pass
+        # Routes typically call add() then commit() without an explicit
+        # flush() — assign default ids here too so returned objects (and
+        # any immediate follow-up lookups within the same test) behave like
+        # a real session would after an insert.
+        self.flush()
 
     def refresh(self, *args, **kwargs):
         pass
@@ -130,6 +153,7 @@ class MockDBSession:
         """Clear added objects and query results (call between requests)."""
         self.added = []
         self._query = MockQuery()
+        self._queries_by_model = {}
 
 
 @pytest.fixture
