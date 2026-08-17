@@ -717,8 +717,24 @@ async def update_missing_images(db_session, max_updates: int = 20) -> int:
 
     Iterates through active deals without image_url and fetches the
     image from Amazon's product page. Rate-limited to avoid blocking.
+
+    Requires SCRAPER_PROXY_URL, same as the Walmart scraper — direct
+    requests to Amazon product pages from Render's cloud IPs get blocked,
+    and every blocked request burns through ScrapingClient's full retry/
+    backoff cycle (multiple seconds each). Without a proxy this used to
+    silently hang the caller for 30-60+ seconds per invocation and return
+    nothing; it now no-ops immediately instead so it's safe to call from
+    request-latency-sensitive paths like scrape-all/public.
     """
     from app.db.models import ArbitrageDeal
+
+    proxy = getattr(settings, "SCRAPER_PROXY_URL", "") or None
+    if not proxy:
+        logger.info(
+            "Image backfill skipped (no SCRAPER_PROXY_URL configured — "
+            "direct Amazon image fetches from cloud IPs get blocked/hang)"
+        )
+        return 0
 
     deals_without_images = (
         db_session.query(ArbitrageDeal)
@@ -738,7 +754,10 @@ async def update_missing_images(db_session, max_updates: int = 20) -> int:
     logger.info(f"Fetching images for {len(deals_without_images)} deals...")
     updated = 0
 
-    async with ScrapingClient(rate_limit_seconds=2.0) as client:
+    # Fail fast per-item (max_retries=1) so a bad batch can't balloon the
+    # caller's latency — this runs inline in scrape-all/public, which has
+    # its own cron-level timeout to respect.
+    async with ScrapingClient(rate_limit_seconds=2.0, max_retries=1, proxy_url=proxy) as client:
         for deal in deals_without_images:
             try:
                 image_url = await fetch_amazon_image_for_asin(deal.asin, client)
