@@ -1,0 +1,103 @@
+# Render Blueprint — BargainHuntrs
+# Reproducible infrastructure for both frontend and backend services.
+# Database is managed separately via the Render dashboard (PostgreSQL).
+# See: https://render.com/docs/blueprint-spec
+
+services:
+  # ─── Backend API (FastAPI / Python) ───────────────────────────────
+  - type: web
+    name: bargain-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 4030
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bargain-db
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+      - key: CORS_ORIGINS
+        value: https://www.bargainhuntrs.com,https://bargainhuntrs.com,https://bargain-web.onrender.com
+      - key: SQL_ECHO
+        value: "false"
+      - key: AUTO_SCAN
+        value: "true"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_FREE
+        sync: false
+      - key: STRIPE_PRICE_HUNTER
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        value: deals@bargainhuntrs.com
+      - key: IMPACT_API_KEY
+        sync: false
+      - key: IMPACT_ACCOUNT_ID
+        sync: false
+      - key: BUFFER_ACCESS_TOKEN
+        sync: false
+      - key: BUFFER_PROFILE_IDS
+        sync: false
+      - key: TELNYX_API_KEY
+        sync: false
+      - key: TELNYX_FROM_NUMBER
+        sync: false
+      - key: TELNYX_MESSAGING_PROFILE_ID
+        sync: false
+      - key: AMAZON_ASSOCIATE_TAG
+        value: bargain0a-20
+      - key: TWITTER_API_KEY
+        sync: false
+      - key: TWITTER_API_SECRET
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN_SECRET
+        sync: false
+      - key: SCRAPER_PROXY_URL
+        sync: false
+
+  # ─── Frontend (Next.js) ───────────────────────────────────────────
+  - type: web
+    name: bargain-web
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: bargain-web
+    buildCommand: pnpm install --frozen-lockfile; pnpm run build
+    startCommand: pnpm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.bargainhuntrs.com
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: PORT
+        value: "3030"
+
+# ─── Database (PostgreSQL) ──────────────────────────────────────────
+databases:
+  - name: bargain-db
+    plan: free
+    region: oregon
+    ipAllowList: []

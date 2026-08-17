@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
-// @ts-ignore - next-pwa does not ship type declarations
-import withPWA from "next-pwa";
+import withPWAInit from "@ducanh2912/next-pwa";
 
 const nextConfig: NextConfig = {
   env: {
@@ -22,9 +21,10 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA({
+const withPWA = withPWAInit({
   dest: "public",
   register: true,
-  skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
-})(nextConfig);
+});
+
+export default withPWA(nextConfig);

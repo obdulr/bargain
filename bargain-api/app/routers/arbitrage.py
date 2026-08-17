@@ -318,6 +318,29 @@ async def scrape_all_deals_public(
     except Exception as e:
         results["images_updated_error"] = str(e)
 
+    # Backfill placeholder images for deals still missing images after the
+    # proxy-gated Amazon backfill above. This generates branded SVG
+    # placeholders (served from /deals/placeholder/{id}) so the frontend
+    # always has a visual to show — no external proxy needed.
+    try:
+        base_url = "https://api.bargainhuntrs.com/api/v1/arbitrage"
+        missing = (
+            db.query(ArbitrageDeal)
+            .filter(
+                ArbitrageDeal.status == "active",
+                (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+            )
+            .all()
+        )
+        for deal in missing:
+            deal.image_url = f"{base_url}/deals/placeholder/{deal.id}"
+        if missing:
+            db.commit()
+        results["placeholders_set"] = len(missing)
+    except Exception as e:
+        db.rollback()
+        results["placeholders_error"] = str(e)
+
     # Walmart direct scrape (only does anything if SCRAPER_PROXY_URL is set —
     # see walmart_scraper.py docstring for why it's a hard requirement there)
     try:
@@ -528,6 +551,112 @@ async def update_deal_images_public(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update images: {str(e)}",
         )
+
+
+
+@router.get("/deals/placeholder/{deal_id}")
+async def get_deal_placeholder_image(
+    deal_id: str,
+    db: Session = Depends(get_db),
+):
+    """Generate a branded SVG placeholder image for a deal.
+
+    Used as a fallback image_url for deals that don't have a real product
+    image. Returns an SVG with the deal title, price, and BargainHuntrs
+    branding — no external requests or proxy needed.
+    """
+    from app.db.models import ArbitrageDeal
+
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deal not found",
+        )
+
+    title = (deal.title or "Deal")[:60]
+    price = f"${deal.buy_price}" if deal.buy_price else ""
+    discount = ""
+    if deal.historical_avg and deal.buy_price and deal.historical_avg > deal.buy_price:
+        pct = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+        if pct > 0:
+            discount = f"{pct}% OFF"
+
+    # Truncate title for display
+    display_title = title if len(title) <= 40 else title[:37] + "..."
+
+    # Pick a gradient based on deal tier
+    tier = deal.deal_tier or "clearance"
+    gradients = {
+        "glitch": ("#7c3aed", "#ec4899"),
+        "trending": ("#f59e0b", "#ef4444"),
+        "clearance": ("#10b981", "#3b82f6"),
+    }
+    c1, c2 = gradients.get(tier, gradients["clearance"])
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:{c1}"/>
+      <stop offset="100%" style="stop-color:{c2}"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <text x="200" y="180" font-family="system-ui,sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">{price}</text>
+  <text x="200" y="220" font-family="system-ui,sans-serif" font-size="20" font-weight="bold" fill="white" fill-opacity="0.9" text-anchor="middle" dominant-baseline="middle">{discount}</text>
+  <text x="200" y="300" font-family="system-ui,sans-serif" font-size="14" fill="white" fill-opacity="0.85" text-anchor="middle" dominant-baseline="middle">{display_title}</text>
+  <text x="200" y="370" font-family="system-ui,sans-serif" font-size="12" font-weight="bold" fill="white" fill-opacity="0.6" text-anchor="middle">BargainHuntrs</text>
+</svg>"""
+
+    from fastapi import Response
+    return Response(content=svg, media_type="image/svg+xml", headers={
+        "Cache-Control": "public, max-age=86400",
+    })
+
+
+@router.post("/deals/backfill-placeholders/public", response_model=dict)
+async def backfill_placeholder_images_public(
+    db: Session = Depends(get_db),
+    max_updates: int = Query(500, le=2000),
+):
+    """Set placeholder image URLs for active deals missing images — no auth.
+
+    Generates a data-URI SVG placeholder for each deal without an image_url
+    and saves it to the database. This runs once to backfill existing deals;
+    new deals should get real images from the scraper. No proxy needed.
+    """
+    from app.db.models import ArbitrageDeal
+    import urllib.parse
+
+    deals_without_images = (
+        db.query(ArbitrageDeal)
+        .filter(
+            ArbitrageDeal.status == "active",
+            (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+        )
+        .limit(max_updates)
+        .all()
+    )
+
+    if not deals_without_images:
+        return {"placeholders_set": 0, "status": "success"}
+
+    updated = 0
+    base_url = "https://api.bargainhuntrs.com/api/v1/arbitrage"
+    for deal in deals_without_images:
+        deal.image_url = f"{base_url}/deals/placeholder/{deal.id}"
+        updated += 1
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to backfill placeholders: {str(e)}",
+        )
+
+    return {"placeholders_set": updated, "status": "success"}
 
 
 @router.post("/deals/{deal_id}/post-to-x/public", response_model=dict)
