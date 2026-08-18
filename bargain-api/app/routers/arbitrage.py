@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 from app.db.session import get_db
 from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot
+from app.core.config import settings
 from app.routers.auth import get_current_user
 from app.services.arbitrage import (
     find_arbitrage_for_asin,
@@ -493,7 +494,7 @@ async def scrape_all_deals_public(
                     ArbitrageDeal.alerted_at == None,
                 )
                 .order_by(ArbitrageDeal.detected_at.desc())
-                .limit(3)
+                .limit(settings.BUFFER_POSTS_PER_WINDOW)
                 .all()
             )
             if new_deals:
