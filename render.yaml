@@ -51,10 +51,18 @@ services:
         sync: false
       - key: IMPACT_ACCOUNT_ID
         sync: false
-      - key: BUFFER_ACCESS_TOKEN
+      - key: BUFFER_API_KEY
         sync: false
-      - key: BUFFER_PROFILE_IDS
+      - key: BUFFER_CHANNEL_ID
         sync: false
+      - key: BUFFER_IG_CHANNEL_ID
+        sync: false
+      - key: BUFFER_FB_CHANNEL_ID
+        sync: false
+      - key: BUFFER_ORG_ID
+        sync: false
+      - key: BUFFER_MAX_QUEUE
+        value: "10"
       - key: TELNYX_API_KEY
         sync: false
       - key: TELNYX_FROM_NUMBER

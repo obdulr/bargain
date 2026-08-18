@@ -517,6 +517,14 @@ async def scrape_all_deals_public(
                         posted += 1
                         deal.alerted_at = datetime.utcnow()
                         db.commit()
+                    # Capture per-channel details for the first post for diagnostics
+                    if "buffer_details" not in results:
+                        results["buffer_details"] = {
+                            "status": result.get("status"),
+                            "channels_posted": result.get("channels_posted", 0),
+                            "channels_failed": result.get("channels_failed", 0),
+                            "error": result.get("error"),
+                        }
                 results["x_posted"] = posted
             else:
                 results["x_posted"] = 0
@@ -525,6 +533,64 @@ async def scrape_all_deals_public(
             results["x_error"] = str(e)
 
     return results
+
+
+@router.post("/deals/test-buffer/public", response_model=dict)
+async def test_buffer_post_public(
+    db: Session = Depends(get_db),
+):
+    """Test Buffer posting to all configured channels — no auth required.
+
+    Picks the most recent active deal and attempts to post it to all
+    configured Buffer channels (X, Instagram, Facebook). Returns the
+    per-channel result so you can see which channels are working.
+    Does NOT mark the deal as alerted.
+    """
+    from app.services.x_poster import post_deal_to_x, is_configured, _get_all_channel_ids
+
+    if not is_configured():
+        return {
+            "status": "error",
+            "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set",
+            "configured_channels": _get_all_channel_ids(),
+        }
+
+    deal = (
+        db.query(ArbitrageDeal)
+        .filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.is_profitable == True,
+        )
+        .order_by(ArbitrageDeal.detected_at.desc())
+        .first()
+    )
+    if not deal:
+        return {"status": "error", "error": "No active deals to test with"}
+
+    discount = 0
+    if deal.historical_avg and deal.historical_avg > deal.buy_price:
+        discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg) * 100)))
+
+    result = await post_deal_to_x(
+        title=deal.title,
+        deal_price=float(deal.buy_price),
+        original_price=float(deal.historical_avg) if deal.historical_avg else None,
+        discount_percent=discount,
+        retailer=getattr(deal, "retailer", None) or "amazon",
+        deal_url=deal.buy_url or "",
+        deal_tier=deal.deal_tier,
+        image_url=deal.image_url,
+    )
+
+    return {
+        "status": result.get("status"),
+        "channels_posted": result.get("channels_posted", 0),
+        "channels_failed": result.get("channels_failed", 0),
+        "error": result.get("error"),
+        "configured_channel_count": len(_get_all_channel_ids()),
+        "deal_used": str(deal.id),
+        "tweet_text": result.get("tweet_text", "")[:200],
+    }
 
 
 @router.post("/deals/update-images/public", response_model=dict)
