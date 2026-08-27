@@ -164,6 +164,8 @@ async def fetch_awin_promotions(max_results: int = 100) -> list[AffiliateDeal]:
     """Fetch promotions/deals from Awin Promotions API.
 
     Requires AWIN_API_TOKEN and AWIN_PUBLISHER_ID env vars.
+    Fetches all promotion types (voucher, offer, discount, sale, contest)
+    to maximize deal coverage across joined advertisers.
     """
     if not _awin_configured():
         logger.info("Awin not configured — skipping")
@@ -173,64 +175,122 @@ async def fetch_awin_promotions(max_results: int = 100) -> list[AffiliateDeal]:
     publisher_id = settings.AWIN_PUBLISHER_ID
     deals: list[AffiliateDeal] = []
 
+    # Fetch all promotion types — not just vouchers
+    promotion_types = ["voucher", "offer", "discount", "sale", "contest"]
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Promotions API
-            url = f"{AWIN_API_BASE}/promotions"
-            params = {
-                "accessToken": token,
-                "publisherId": publisher_id,
-                "promotionType": "voucher",  # voucher codes and promotions
-                "region": "US",
-                "pageSize": str(max_results),
-            }
-            resp = await client.get(url, params=params)
-
-            if resp.status_code != 200:
-                logger.warning(f"Awin API error: {resp.status_code}")
-                return []
-
-            data = resp.json()
-            for promo in data.get("promotions", [])[:max_results]:
+            for ptype in promotion_types:
                 try:
-                    title = promo.get("title", "")
-                    deal_url = promo.get("trackingUrl", "") or promo.get("url", "")
-                    original_url = promo.get("url", "")
-                    promo_code = promo.get("voucherCode", "")
-                    image = promo.get("imageUrl", "")
-                    advertiser = promo.get("advertiserName", "")
-                    expires = promo.get("endDate", "")
+                    url = f"{AWIN_API_BASE}/promotions"
+                    params = {
+                        "accessToken": token,
+                        "publisherId": publisher_id,
+                        "promotionType": ptype,
+                        "region": "US",
+                        "pageSize": str(max_results),
+                    }
+                    resp = await client.get(url, params=params)
 
-                    if not title:
+                    if resp.status_code != 200:
+                        logger.debug(f"Awin {ptype} API returned {resp.status_code}")
                         continue
 
-                    retailer = _normalize_retailer(advertiser)
-                    expires_at = None
-                    if expires:
+                    data = resp.json()
+                    for promo in data.get("promotions", [])[:max_results]:
                         try:
-                            expires_at = datetime.fromisoformat(expires.replace("Z", ""))
-                        except (ValueError, TypeError):
-                            pass
+                            title = promo.get("title", "")
+                            deal_url = promo.get("trackingUrl", "") or promo.get("url", "")
+                            original_url = promo.get("url", "")
+                            promo_code = promo.get("voucherCode", "")
+                            image = promo.get("imageUrl", "")
+                            advertiser = promo.get("advertiserName", "")
+                            expires = promo.get("endDate", "")
+                            description = promo.get("description", "")
 
-                    deals.append(AffiliateDeal(
-                        title=title[:500],
-                        deal_url=deal_url,
-                        original_url=original_url,
-                        retailer=retailer,
-                        network="awin",
-                        image_url=image if image else None,
-                        promo_code=promo_code if promo_code else None,
-                        description=promo.get("description", "")[:1000],
-                        expires_at=expires_at,
-                    ))
+                            if not title or not deal_url:
+                                continue
+
+                            retailer = _normalize_retailer(advertiser)
+
+                            # Try to extract price info from the description/title
+                            deal_price, original_price, discount_percent = _extract_awin_prices(
+                                title, description, promo.get("code", "")
+                            )
+
+                            expires_at = None
+                            if expires:
+                                try:
+                                    expires_at = datetime.fromisoformat(expires.replace("Z", ""))
+                                except (ValueError, TypeError):
+                                    pass
+
+                            deals.append(AffiliateDeal(
+                                title=title[:500],
+                                deal_url=deal_url,
+                                original_url=original_url,
+                                retailer=retailer,
+                                network="awin",
+                                deal_price=deal_price,
+                                original_price=original_price,
+                                discount_percent=discount_percent,
+                                image_url=image if image else None,
+                                promo_code=promo_code if promo_code else None,
+                                description=description[:1000],
+                                expires_at=expires_at,
+                            ))
+                        except Exception as e:
+                            logger.debug(f"Failed to parse Awin promo: {e}")
                 except Exception as e:
-                    logger.debug(f"Failed to parse Awin promo: {e}")
+                    logger.debug(f"Awin {ptype} fetch error: {e}")
 
     except Exception as e:
         logger.error(f"Awin fetch failed: {e}")
 
-    logger.info(f"Awin: {len(deals)} promotions fetched")
-    return deals
+    # Deduplicate by tracking URL
+    seen_urls: set[str] = set()
+    unique_deals: list[AffiliateDeal] = []
+    for deal in deals:
+        if deal.deal_url not in seen_urls:
+            seen_urls.add(deal.deal_url)
+            unique_deals.append(deal)
+
+    logger.info(f"Awin: {len(unique_deals)} promotions fetched (from {len(deals)} raw, deduped)")
+    return unique_deals
+
+
+def _extract_awin_prices(
+    title: str, description: str, code: str
+) -> tuple[Optional[Decimal], Optional[Decimal], Optional[int]]:
+    """Try to extract price/discount info from Awin promotion text.
+
+    Awin promotions don't always have structured price fields, but the
+    title/description often contains discount info like "$50 off", "20% off",
+    "Save $30", etc.
+    """
+    import re
+
+    text = f"{title} {description}".lower()
+
+    # Try to find discount percentage (e.g., "20% off", "save 30%")
+    pct_match = re.search(r'(\d+)\s*%\s*off', text)
+    if pct_match:
+        discount_percent = int(pct_match.group(1))
+        return None, None, discount_percent
+
+    # Try "save $X" pattern
+    save_match = re.search(r'save\s+\$(\d+)', text)
+    if save_match:
+        savings = Decimal(save_match.group(1))
+        return None, None, int(savings)  # We have savings but not prices
+
+    # Try "$X off" pattern
+    off_match = re.search(r'\$(\d+)\s*off', text)
+    if off_match:
+        savings = Decimal(off_match.group(1))
+        return None, None, int(savings)
+
+    return None, None, None
 
 
 async def fetch_awin_programmes(
@@ -493,3 +553,88 @@ def get_configured_networks() -> list[str]:
     if _skimlinks_configured():
         configured.append("skimlinks")
     return configured
+
+
+def save_affiliate_deals_to_database(deals: list[AffiliateDeal], db_session) -> int:
+    """Save affiliate deals to the ArbitrageDeal table.
+
+    Each affiliate deal is saved with its network as the retailer prefix
+    (e.g., "awin_ambrose") and the affiliate tracking URL as buy_url.
+    Existing deals are refreshed (price/timestamp updated) rather than
+    skipped, same as Impact.com deals.
+    """
+    from app.db.models import ArbitrageDeal
+    from datetime import datetime
+
+    saved = 0
+    for deal in deals:
+        try:
+            # Generate a unique ASIN-like ID from the network + retailer + URL hash
+            deal_id = f"{deal.network}_{deal.retailer}_{abs(hash(deal.deal_url))}"[:36]
+
+            existing = (
+                db_session.query(ArbitrageDeal)
+                .filter(
+                    ArbitrageDeal.asin == deal_id,
+                    ArbitrageDeal.status == "active",
+                )
+                .first()
+            )
+
+            buy_price = deal.deal_price or Decimal("0")
+            sell_price = deal.original_price or buy_price
+            discount = deal.discount_percent or 0
+            tier = "glitch" if discount >= 75 else ("trending" if discount >= 50 else "clearance")
+
+            if existing:
+                # Refresh existing deal
+                if deal.deal_price:
+                    existing.buy_price = buy_price
+                if deal.original_price:
+                    existing.sell_price = sell_price
+                    existing.historical_avg = sell_price
+                existing.title = deal.title
+                existing.image_url = deal.image_url or existing.image_url
+                existing.buy_url = deal.deal_url
+                existing.detected_at = datetime.utcnow()
+                existing.deal_tier = tier
+                if deal.original_price and deal.deal_price:
+                    existing.net_profit = sell_price - buy_price
+                    existing.roi = float((sell_price - buy_price) / sell_price) if sell_price > 0 else 0
+                db_session.commit()
+                saved += 1
+                continue
+
+            # Create new deal
+            net_profit = (sell_price - buy_price) if deal.original_price and deal.deal_price else Decimal("0")
+            roi = float(net_profit / sell_price) if sell_price and sell_price > 0 and deal.original_price and deal.deal_price else 0
+
+            new_deal = ArbitrageDeal(
+                asin=deal_id,
+                title=deal.title,
+                image_url=deal.image_url,
+                buy_url=deal.deal_url,
+                buy_platform=deal.retailer,
+                retailer=deal.retailer,
+                deal_source="affiliate",
+                buy_price=buy_price,
+                sell_platform=deal.network,
+                sell_price=sell_price,
+                historical_avg=sell_price,
+                deal_tier=tier,
+                net_profit=net_profit,
+                roi=roi,
+                is_profitable=bool(deal.deal_price),
+                status="active",
+                detected_at=datetime.utcnow(),
+            )
+            db_session.add(new_deal)
+            db_session.commit()
+            saved += 1
+
+        except Exception as e:
+            logger.warning(f"Failed to save affiliate deal ({deal.network}/{deal.retailer}): {e}")
+            db_session.rollback()
+
+    logger.info(f"Saved {saved} affiliate deals to database")
+    return saved

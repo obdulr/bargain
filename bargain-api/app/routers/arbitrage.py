@@ -361,11 +361,16 @@ async def scrape_all_deals_public(
     configured = get_configured_networks()
     if configured:
         try:
+            from app.services.affiliate_networks import save_affiliate_deals_to_database
+
             affiliate_deals = await fetch_all_affiliate_deals()
+            affiliate_saved = save_affiliate_deals_to_database(affiliate_deals, db)
             results["sources"]["affiliate_networks"] = {
                 "configured": configured,
                 "found": len(affiliate_deals),
+                "saved": affiliate_saved,
             }
+            results["total_saved"] += affiliate_saved
         except Exception as e:
             results["sources"]["affiliate_networks"] = {"error": str(e)}
     else:

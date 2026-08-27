@@ -51,6 +51,10 @@ services:
         sync: false
       - key: IMPACT_ACCOUNT_ID
         sync: false
+      - key: AWIN_API_TOKEN
+        sync: false
+      - key: AWIN_PUBLISHER_ID
+        value: "2986011"
       - key: BUFFER_API_KEY
         sync: false
       - key: BUFFER_CHANNEL_ID
