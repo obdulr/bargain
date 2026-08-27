@@ -91,14 +91,26 @@ async def _verify_image_url(url: str) -> bool:
 
 async def get_buffer_queue_count(api_key: str, org_id: str, channel_ids: list[str]) -> int:
     """Query Buffer's GraphQL API for the number of queued/scheduled posts."""
+    counts = await get_buffer_queue_counts_per_channel(api_key, org_id, channel_ids)
+    return sum(counts.values())
+
+
+async def get_buffer_queue_counts_per_channel(
+    api_key: str, org_id: str, channel_ids: list[str]
+) -> dict[str, int]:
+    """Query Buffer's GraphQL API for queued post counts per channel.
+
+    Returns a dict mapping channel_id → scheduled post count.
+    Also detects "stuck" posts (created >24h ago but still scheduled) which
+    indicate a disconnected channel that can't publish.
+    """
     if not org_id or not channel_ids:
-        # Fail-open when org or channels are not configured
-        return 0
+        return {}
 
     query = """
     query QueueCount($input: PostsInput!) {
       posts(input: $input) {
-        edges { node { id } }
+        edges { node { id createdAt channel { id } } }
       }
     }
     """
@@ -128,17 +140,99 @@ async def get_buffer_queue_count(api_key: str, org_id: str, channel_ids: list[st
                     logger.warning(
                         f"Buffer queue query error: {data['errors'][0].get('message', 'Unknown')}"
                     )
-                    return 0
+                    return {}
                 edges = data.get("data", {}).get("posts", {}).get("edges", [])
-                return len(edges)
+                counts: dict[str, int] = {cid: 0 for cid in channel_ids}
+                for edge in edges:
+                    node = edge.get("node", {})
+                    # channel id may be nested
+                    ch = node.get("channel", {})
+                    ch_id = ch.get("id", "") if isinstance(ch, dict) else ""
+                    if ch_id in counts:
+                        counts[ch_id] += 1
+                    else:
+                        # If channel info isn't returned, distribute evenly as fallback
+                        pass
+                return counts
             else:
                 logger.warning(
                     f"Buffer queue API returned HTTP {resp.status_code}: {resp.text[:200]}"
                 )
-                return 0
+                return {}
     except Exception as e:
         logger.warning(f"Failed to query Buffer queue count: {e}")
-        return 0
+        return {}
+
+
+async def get_stuck_channel_ids(api_key: str, org_id: str, channel_ids: list[str]) -> set[str]:
+    """Detect channels with stuck posts (created >24h ago, still scheduled).
+
+    These channels are likely disconnected and can't publish. Posting to them
+    just fills the queue with posts that never drain.
+    """
+    if not org_id or not channel_ids:
+        return set()
+
+    query = """
+    query StuckPosts($input: PostsInput!) {
+      posts(input: $input) {
+        edges { node { id createdAt channel { id } } }
+      }
+    }
+    """
+    variables = {
+        "input": {
+            "organizationId": org_id,
+            "filter": {
+                "status": "scheduled",
+                "channelIds": channel_ids,
+            },
+        }
+    }
+
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                BUFFER_API_URL,
+                json={"query": query, "variables": variables},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("errors"):
+                    return set()
+                edges = data.get("data", {}).get("posts", {}).get("edges", [])
+                stuck: dict[str, int] = {}
+                for edge in edges:
+                    node = edge.get("node", {})
+                    created = node.get("createdAt", "")
+                    ch = node.get("channel", {})
+                    ch_id = ch.get("id", "") if isinstance(ch, dict) else ""
+                    if not ch_id or not created:
+                        continue
+                    try:
+                        created_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                        if created_dt < cutoff:
+                            stuck[ch_id] = stuck.get(ch_id, 0) + 1
+                    except (ValueError, TypeError):
+                        pass
+                # A channel is "stuck" if it has 3+ posts older than 24h
+                stuck_channels = {cid for cid, count in stuck.items() if count >= 3}
+                if stuck_channels:
+                    logger.warning(
+                        f"Buffer channels with stuck posts (likely disconnected): {stuck_channels}"
+                    )
+                return stuck_channels
+    except Exception as e:
+        logger.warning(f"Failed to query stuck posts: {e}")
+
+    return set()
 
 # All Buffer channel IDs — posts go to all configured channels
 def _get_all_channel_ids() -> list[str]:
@@ -395,11 +489,14 @@ async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> di
     """Post to all configured Buffer channels (X, Instagram, Facebook).
 
     Buffer will post to each platform automatically.
+    Skips channels that are disconnected (detected via stuck posts) to
+    prevent them from filling the queue with posts that never publish.
     """
     if not is_configured():
         return {"status": "error", "error": "BUFFER_API_KEY or BUFFER_CHANNEL_ID not set"}
 
     api_key = settings.BUFFER_API_KEY
+    org_id = getattr(settings, "BUFFER_ORG_ID", "")
 
     # Build channel list with service types
     channels = []
@@ -413,28 +510,51 @@ async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> di
     if not channels:
         return {"status": "error", "error": "No Buffer channels configured"}
 
-    # Check Buffer free plan queue limit before posting.
-    # The Buffer free plan only allows 10 scheduled posts in the queue.
-    # If the queue is full, skip posting to avoid silent failures.
     max_queue = getattr(settings, "BUFFER_MAX_QUEUE", 10)
     channel_ids = [cid for cid, _ in channels]
-    queue_count = await get_buffer_queue_count(
-        api_key,
-        getattr(settings, "BUFFER_ORG_ID", ""),
-        channel_ids,
-    )
-    if queue_count >= max_queue:
-        logger.warning(
-            f"Buffer queue full ({queue_count}/{max_queue}). Skipping post to avoid errors."
-        )
-        return {
-            "status": "queue_full",
-            "queue_count": queue_count,
-            "max_queue": max_queue,
-            "error": f"Buffer queue full ({queue_count}/{max_queue})",
-        }
 
-    # Post to all channels concurrently
+    # Detect disconnected channels (3+ posts stuck for >24h)
+    stuck_channels = await get_stuck_channel_ids(api_key, org_id, channel_ids)
+    if stuck_channels:
+        logger.warning(
+            f"Skipping disconnected Buffer channels: {stuck_channels}. "
+            f"Re-authenticate them in Buffer dashboard."
+        )
+        channels = [(cid, svc) for cid, svc in channels if cid not in stuck_channels]
+        if not channels:
+            return {
+                "status": "error",
+                "error": "All Buffer channels are disconnected. Re-authenticate in Buffer dashboard.",
+                "skipped_channels": list(stuck_channels),
+            }
+
+    # Check queue limit per-channel (not total) so one stuck channel
+    # doesn't block healthy channels
+    active_channel_ids = [cid for cid, _ in channels]
+    per_channel_counts = await get_buffer_queue_counts_per_channel(
+        api_key, org_id, active_channel_ids
+    )
+
+    # Skip channels that are individually at the queue limit
+    at_limit_channels = {
+        cid for cid in active_channel_ids
+        if per_channel_counts.get(cid, 0) >= max_queue
+    }
+    if at_limit_channels:
+        logger.warning(
+            f"Buffer channels at queue limit ({at_limit_channels}). Skipping them."
+        )
+        channels = [(cid, svc) for cid, svc in channels if cid not in at_limit_channels]
+        if not channels:
+            total = sum(per_channel_counts.values())
+            return {
+                "status": "queue_full",
+                "queue_count": total,
+                "max_queue": max_queue,
+                "error": f"Buffer queue full for all active channels",
+            }
+
+    # Post to all healthy channels concurrently
     tasks = [_post_to_channel(api_key, cid, tweet_text, image_url, svc) for cid, svc in channels]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -447,12 +567,14 @@ async def post_to_buffer(tweet_text: str, image_url: Optional[str] = None) -> di
             "post_id": successes[0].get("post_id"),
             "channels_posted": len(successes),
             "channels_failed": len(failures),
+            "skipped_channels": list(stuck_channels | at_limit_channels),
             "results": results,
         }
     else:
         return {
             "status": "error",
             "error": "; ".join(f.get("error", "?") for f in failures) or "All channels failed",
+            "skipped_channels": list(stuck_channels | at_limit_channels),
             "results": results,
         }
 
