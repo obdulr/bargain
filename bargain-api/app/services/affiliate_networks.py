@@ -160,12 +160,13 @@ def _awin_configured() -> bool:
     return bool(getattr(settings, "AWIN_API_TOKEN", "")) and bool(getattr(settings, "AWIN_PUBLISHER_ID", ""))
 
 
-async def fetch_awin_promotions(max_results: int = 100) -> list[AffiliateDeal]:
-    """Fetch promotions/deals from Awin Promotions API.
+async def fetch_awin_promotions(max_results: int = 200) -> list[AffiliateDeal]:
+    """Fetch promotions/deals from Awin Offers API.
 
     Requires AWIN_API_TOKEN and AWIN_PUBLISHER_ID env vars.
-    Fetches all promotion types (voucher, offer, discount, sale, contest)
-    to maximize deal coverage across joined advertisers.
+    Uses POST /publisher/{publisherId}/promotions (Awin's correct endpoint).
+    Fetches promotions from joined advertisers, filtering client-side
+    since the API's advertiserIds filter doesn't reliably work.
     """
     if not _awin_configured():
         logger.info("Awin not configured — skipping")
@@ -175,74 +176,99 @@ async def fetch_awin_promotions(max_results: int = 100) -> list[AffiliateDeal]:
     publisher_id = settings.AWIN_PUBLISHER_ID
     deals: list[AffiliateDeal] = []
 
-    # Fetch all promotion types — not just vouchers
-    promotion_types = ["voucher", "offer", "discount", "sale", "contest"]
-
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            for ptype in promotion_types:
-                try:
-                    url = f"{AWIN_API_BASE}/promotions"
-                    params = {
-                        "accessToken": token,
-                        "publisherId": publisher_id,
-                        "promotionType": ptype,
-                        "region": "US",
-                        "pageSize": str(max_results),
-                    }
-                    resp = await client.get(url, params=params)
+            # First, get joined advertiser IDs
+            prog_url = f"{AWIN_API_BASE}/publishers/{publisher_id}/programmes"
+            prog_params = {"accessToken": token, "relationship": "joined"}
+            joined_ids: set[int] = set()
+            try:
+                prog_resp = await client.get(prog_url, params=prog_params)
+                if prog_resp.status_code == 200:
+                    programmes = prog_resp.json()
+                    if isinstance(programmes, list):
+                        joined_ids = {p.get("id") for p in programmes if p.get("id")}
+                        logger.info(f"Awin: {len(joined_ids)} joined advertisers")
+            except Exception as e:
+                logger.warning(f"Awin programmes fetch failed: {e}")
 
-                    if resp.status_code != 200:
-                        logger.debug(f"Awin {ptype} API returned {resp.status_code}")
+            # Fetch promotions via POST endpoint
+            url = f"{AWIN_API_BASE}/publisher/{publisher_id}/promotions"
+            params = {"accessToken": token}
+            body = {
+                "pageSize": str(max_results),
+                "type": "promotion",  # Get promotion-type offers first
+            }
+
+            resp = await client.post(url, params=params, json=body)
+
+            if resp.status_code != 200:
+                logger.warning(f"Awin promotions API returned {resp.status_code}: {resp.text[:200]}")
+                return []
+
+            data = resp.json()
+            promos = data.get("data", [])
+            total_available = data.get("pagination", {}).get("total", 0)
+            logger.info(f"Awin: {len(promos)} promotions on page (total available: {total_available})")
+
+            # Also fetch voucher-type offers
+            body_voucher = {"pageSize": str(max_results), "type": "voucher"}
+            resp_v = await client.post(url, params=params, json=body_voucher)
+            if resp_v.status_code == 200:
+                data_v = resp_v.json()
+                promos.extend(data_v.get("data", []))
+                logger.info(f"Awin: {len(data_v.get('data', []))} voucher offers added")
+
+            for promo in promos:
+                try:
+                    title = promo.get("title", "")
+                    advertiser_info = promo.get("advertiser", {})
+                    advertiser_id = advertiser_info.get("id")
+                    advertiser_name = advertiser_info.get("name", "")
+                    deal_url = promo.get("urlTracking", "") or promo.get("url", "")
+                    original_url = promo.get("url", "")
+                    promo_code = promo.get("voucherCode", "") or promo.get("code", "")
+                    description = promo.get("description", "")
+                    expires = promo.get("endDate", "")
+                    promo_type = promo.get("type", "")
+
+                    if not title or not deal_url:
                         continue
 
-                    data = resp.json()
-                    for promo in data.get("promotions", [])[:max_results]:
+                    # Filter to joined advertisers only (if we have the list)
+                    if joined_ids and advertiser_id and advertiser_id not in joined_ids:
+                        continue
+
+                    retailer = _normalize_retailer(advertiser_name)
+
+                    # Extract price/discount from title and description
+                    deal_price, original_price, discount_percent = _extract_awin_prices(
+                        title, description, promo_code
+                    )
+
+                    expires_at = None
+                    if expires:
                         try:
-                            title = promo.get("title", "")
-                            deal_url = promo.get("trackingUrl", "") or promo.get("url", "")
-                            original_url = promo.get("url", "")
-                            promo_code = promo.get("voucherCode", "")
-                            image = promo.get("imageUrl", "")
-                            advertiser = promo.get("advertiserName", "")
-                            expires = promo.get("endDate", "")
-                            description = promo.get("description", "")
+                            expires_at = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+                        except (ValueError, TypeError):
+                            pass
 
-                            if not title or not deal_url:
-                                continue
-
-                            retailer = _normalize_retailer(advertiser)
-
-                            # Try to extract price info from the description/title
-                            deal_price, original_price, discount_percent = _extract_awin_prices(
-                                title, description, promo.get("code", "")
-                            )
-
-                            expires_at = None
-                            if expires:
-                                try:
-                                    expires_at = datetime.fromisoformat(expires.replace("Z", ""))
-                                except (ValueError, TypeError):
-                                    pass
-
-                            deals.append(AffiliateDeal(
-                                title=title[:500],
-                                deal_url=deal_url,
-                                original_url=original_url,
-                                retailer=retailer,
-                                network="awin",
-                                deal_price=deal_price,
-                                original_price=original_price,
-                                discount_percent=discount_percent,
-                                image_url=image if image else None,
-                                promo_code=promo_code if promo_code else None,
-                                description=description[:1000],
-                                expires_at=expires_at,
-                            ))
-                        except Exception as e:
-                            logger.debug(f"Failed to parse Awin promo: {e}")
+                    deals.append(AffiliateDeal(
+                        title=title[:500],
+                        deal_url=deal_url,
+                        original_url=original_url,
+                        retailer=retailer,
+                        network="awin",
+                        deal_price=deal_price,
+                        original_price=original_price,
+                        discount_percent=discount_percent,
+                        image_url=None,  # Awin promotions API doesn't return images
+                        promo_code=promo_code if promo_code else None,
+                        description=description[:1000],
+                        expires_at=expires_at,
+                    ))
                 except Exception as e:
-                    logger.debug(f"Awin {ptype} fetch error: {e}")
+                    logger.debug(f"Failed to parse Awin promo: {e}")
 
     except Exception as e:
         logger.error(f"Awin fetch failed: {e}")
