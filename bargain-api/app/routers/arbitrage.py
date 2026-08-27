@@ -329,7 +329,10 @@ async def scrape_all_deals_public(
             db.query(ArbitrageDeal)
             .filter(
                 ArbitrageDeal.status == "active",
-                (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+                (ArbitrageDeal.image_url == None)
+                | (ArbitrageDeal.image_url == "")
+                | (ArbitrageDeal.image_url == "None")
+                | (ArbitrageDeal.image_url == "null"),
             )
             .all()
         )
@@ -704,7 +707,10 @@ async def backfill_placeholder_images_public(
         db.query(ArbitrageDeal)
         .filter(
             ArbitrageDeal.status == "active",
-            (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+            (ArbitrageDeal.image_url == None)
+            | (ArbitrageDeal.image_url == "")
+            | (ArbitrageDeal.image_url == "None")
+            | (ArbitrageDeal.image_url == "null"),
         )
         .limit(max_updates)
         .all()

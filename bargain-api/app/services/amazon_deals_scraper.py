@@ -647,7 +647,7 @@ def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
                 existing.sell_price = deal.original_price or deal.deal_price
                 existing.historical_avg = deal.original_price
                 existing.title = deal.title
-                existing.image_url = deal.image_url
+                existing.image_url = deal.image_url if deal.image_url else None
                 existing.buy_url = deal.url
                 existing.detected_at = datetime.utcnow()
                 existing.deal_tier = _deal_tier_for(deal)
@@ -682,7 +682,7 @@ def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
             new_deal = ArbitrageDeal(
                 asin=deal.asin,
                 title=deal.title,
-                image_url=deal.image_url,
+                image_url=deal.image_url if deal.image_url else None,
                 buy_url=deal.url,
                 buy_platform="amazon",
                 retailer="amazon",
