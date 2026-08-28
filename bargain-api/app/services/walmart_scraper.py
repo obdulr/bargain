@@ -400,7 +400,8 @@ def save_walmart_deals_to_database(products: list[WalmartProduct], db_session) -
                 existing.sell_price = sell_price
                 existing.historical_avg = product.original_price
                 existing.title = product.title
-                existing.image_url = product.image_url
+                if product.image_url:
+                    existing.image_url = product.image_url
                 existing.buy_url = product.url
                 existing.detected_at = datetime.utcnow()
                 existing.deal_tier = tier

@@ -647,7 +647,10 @@ def save_deals_to_database(deals: list[AmazonDeal], db_session) -> int:
                 existing.sell_price = deal.original_price or deal.deal_price
                 existing.historical_avg = deal.original_price
                 existing.title = deal.title
-                existing.image_url = deal.image_url if deal.image_url else None
+                # Only overwrite image_url if we have a real image.
+                # Don't clobber an existing placeholder with NULL.
+                if deal.image_url:
+                    existing.image_url = deal.image_url
                 existing.buy_url = deal.url
                 existing.detected_at = datetime.utcnow()
                 existing.deal_tier = _deal_tier_for(deal)
