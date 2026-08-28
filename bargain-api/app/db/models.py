@@ -28,6 +28,7 @@ class User(Base):
     discord_alerts = Column(Boolean, default=False)
     telegram_alerts = Column(Boolean, default=False)
     push_notifications = Column(Boolean, default=False)
+    fcm_token = Column(String(500))  # Firebase Cloud Messaging token for web push
     weekly_digest = Column(Boolean, default=True)
     glitch_alerts = Column(Boolean, default=True)
 

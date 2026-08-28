@@ -51,7 +51,7 @@ async def list_channels(
         ("telegram", bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHANNEL_ID)),
         ("twitter", bool(settings.TWITTER_API_KEY and settings.TWITTER_ACCESS_TOKEN)),
         ("facebook", bool(settings.FACEBOOK_PAGE_ACCESS_TOKEN and settings.FACEBOOK_PAGE_ID)),
-        ("sms", bool(settings.TELNYX_API_KEY and settings.TELNYX_FROM_NUMBER)),
+        ("push", bool(settings.FIREBASE_PROJECT_ID and settings.FIREBASE_CLIENT_EMAIL)),
         ("email", bool(settings.RESEND_API_KEY)),
     ]
     return [ChannelStatus(channel=name, configured=configured) for name, configured in channels]
@@ -279,3 +279,84 @@ async def unsubscribe_from_niche(
     db.refresh(current_user)
 
     return {"success": True, "subscribed_niches": current_user.subscribed_niches or []}
+
+
+# --- Firebase Cloud Messaging (push notifications) ---
+
+
+class FCMTokenRequest(BaseModel):
+    token: str
+
+
+class PushTestRequest(BaseModel):
+    title: str = "Test Push Notification"
+    body: str = "This is a test from BargainHuntrs!"
+
+
+@router.post("/push/register")
+async def register_fcm_token(
+    req: FCMTokenRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Register or update the user's FCM token for web push notifications."""
+    if not req.token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="FCM token is required",
+        )
+
+    current_user.fcm_token = req.token
+    current_user.push_notifications = True
+    db.commit()
+
+    return {"success": True, "message": "FCM token registered"}
+
+
+@router.delete("/push/unregister")
+async def unregister_fcm_token(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove the user's FCM token (disable push notifications)."""
+    current_user.fcm_token = None
+    current_user.push_notifications = False
+    db.commit()
+
+    return {"success": True, "message": "FCM token removed"}
+
+
+@router.post("/push/test")
+async def test_push_notification(
+    req: PushTestRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Send a test push notification to the current user."""
+    from app.services.firebase_service import send_push_notification, is_firebase_configured
+
+    if not is_firebase_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Push notifications are not configured",
+        )
+
+    if not current_user.fcm_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No FCM token registered. Enable push notifications first.",
+        )
+
+    result = await send_push_notification(
+        token=current_user.fcm_token,
+        title=req.title,
+        body=req.body,
+        url="https://www.bargainhuntrs.com/deals",
+    )
+
+    if result.get("status") == "invalid_token":
+        current_user.fcm_token = None
+        current_user.push_notifications = False
+        db.commit()
+
+    return result

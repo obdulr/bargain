@@ -250,36 +250,23 @@ async def send_facebook(deal: DealInfo) -> bool:
             return False
 
 
-# ─── SMS (Telnyx) ────────────────────────────────────────────────────────────
+# ─── Push (Firebase Cloud Messaging) ────────────────────────────────────────
 
-async def send_sms(deal: DealInfo, phone_number: str) -> bool:
-    """Send SMS alert via Telnyx to a specific phone number."""
-    if not all([settings.TELNYX_API_KEY, settings.TELNYX_FROM_NUMBER]):
-        logger.debug("Telnyx not configured, skipping")
-        return False
+async def send_push(deal: DealInfo, fcm_token: str) -> bool:
+    """Send push notification via Firebase Cloud Messaging."""
+    from app.services.firebase_service import send_push_notification
 
-    url = "https://api.telnyx.com/v2/messages"
-    headers = {
-        "Authorization": f"Bearer {settings.TELNYX_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "from": settings.TELNYX_FROM_NUMBER,
-        "to": phone_number,
-        "text": build_short_message(deal),
-    }
-    if settings.TELNYX_MESSAGING_PROFILE_ID:
-        payload["messaging_profile_id"] = settings.TELNYX_MESSAGING_PROFILE_ID
+    title = f"🔥 {deal.deal_tier.upper()}" if deal.deal_tier != "clearance" else "💰 Deal Alert"
+    body = f"{deal.title[:60]}\n${deal.deal_price} (was ${deal.original_price}) at {deal.retailer}"
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            logger.info(f"SMS: sent deal {deal.asin} to {phone_number}")
-            return True
-        except Exception as e:
-            logger.error(f"SMS: failed to send to {phone_number}: {e}")
-            return False
+    result = await send_push_notification(
+        token=fcm_token,
+        title=title,
+        body=body,
+        url=deal.deal_url,
+        image_url=deal.image_url,
+    )
+    return result.get("status") == "success"
 
 
 # ─── Central distribution ───────────────────────────────────────────────────
@@ -287,14 +274,14 @@ async def send_sms(deal: DealInfo, phone_number: str) -> bool:
 async def distribute_deal(
     deal: DealInfo,
     db: Session,
-    sms_recipients: Optional[list[str]] = None,
+    push_recipients: Optional[list[str]] = None,
 ) -> dict:
     """Distribute a deal to all configured notification channels.
 
     Args:
         deal: DealInfo with deal details
         db: Database session for logging
-        sms_recipients: List of phone numbers for SMS (paid users with SMS enabled)
+        push_recipients: List of FCM tokens for push notifications (users with push enabled)
 
     Returns:
         Dict of channel -> success bool
@@ -317,11 +304,10 @@ async def distribute_deal(
     if settings.FACEBOOK_PAGE_ACCESS_TOKEN:
         channels["facebook"] = asyncio.create_task(send_facebook(deal))
 
-    # SMS (per-recipient)
-    sms_results = []
-    if sms_recipients and settings.TELNYX_API_KEY:
-        for phone in sms_recipients:
-            channels[f"sms:{phone}"] = asyncio.create_task(send_sms(deal, phone))
+    # Push notifications (per-recipient FCM tokens)
+    if push_recipients:
+        for token in push_recipients:
+            channels[f"push:{token[:20]}"] = asyncio.create_task(send_push(deal, token))
     # Wait for all
     results = {}
     for name, task in channels.items():

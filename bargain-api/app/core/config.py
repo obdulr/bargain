@@ -83,10 +83,10 @@ class Settings(BaseSettings):
     FACEBOOK_PAGE_ACCESS_TOKEN: str = ""
     FACEBOOK_PAGE_ID: str = ""
 
-    # SMS (Telnyx)
-    TELNYX_API_KEY: str = ""
-    TELNYX_FROM_NUMBER: str = ""  # e.g. +1234567890
-    TELNYX_MESSAGING_PROFILE_ID: str = ""  # Telnyx messaging profile ID
+    # Firebase Cloud Messaging (push notifications)
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_CLIENT_EMAIL: str = ""
+    FIREBASE_PRIVATE_KEY: str = ""
 
     # Notification settings
     NOTIFY_MIN_PROFIT: float = 5.0  # Only notify on deals with >= $5 net profit

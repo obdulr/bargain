@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import {
   getCurrentUser,
   getNotificationPreferences,
@@ -63,7 +64,7 @@ const PREFERENCE_ITEMS: {
   {
     key: "push_notifications",
     label: "Push notifications",
-    description: "Browser push alerts when deals are detected.",
+    description: "Browser push alerts when deals are detected. Use the Enable button below.",
   },
   {
     key: "weekly_digest",
@@ -80,6 +81,7 @@ const PREFERENCE_ITEMS: {
 export default function NotificationSettingsPage() {
   const router = useRouter();
   const { user, loading, idToken } = useAuth();
+  const push = usePushNotifications();
 
   const [userData, setUserData] = useState<UserData | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
@@ -91,6 +93,7 @@ export default function NotificationSettingsPage() {
   const [togglingNiches, setTogglingNiches] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pushStatus, setPushStatus] = useState("");
 
   const isHunter = (userData?.subscription_tier || "free").toLowerCase() === "hunter";
 
@@ -171,6 +174,36 @@ export default function NotificationSettingsPage() {
     }
   }
 
+  async function handleEnablePush() {
+    setPushStatus("Requesting permission...");
+    const ok = await push.enable();
+    if (ok) {
+      setPushStatus("Push notifications enabled! Click Test to verify.");
+      setPreferences((prev) => ({ ...prev, push_notifications: true }));
+    } else {
+      setPushStatus("Failed to enable. Make sure you allow notifications in your browser.");
+    }
+    setTimeout(() => setPushStatus(""), 5000);
+  }
+
+  async function handleDisablePush() {
+    await push.disable();
+    setPushStatus("Push notifications disabled.");
+    setPreferences((prev) => ({ ...prev, push_notifications: false }));
+    setTimeout(() => setPushStatus(""), 3000);
+  }
+
+  async function handleTestPush() {
+    setPushStatus("Sending test...");
+    const result = await push.sendTest();
+    if (result?.status === "success") {
+      setPushStatus("Test sent! Check your browser notifications.");
+    } else {
+      setPushStatus(`Test failed: ${result?.error || "unknown error"}`);
+    }
+    setTimeout(() => setPushStatus(""), 5000);
+  }
+
   if (loading || isLoading) {
     return (
       <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
@@ -217,8 +250,59 @@ export default function NotificationSettingsPage() {
           </div>
         )}
 
+        {/* Push notification setup */}
+        <section className="mt-8 rounded-2xl border border-blue-200 bg-blue-50/50 p-6 dark:border-blue-900 dark:bg-blue-950/20">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            🔔 Push Notifications
+          </h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Get instant deal alerts in your browser — even when you&apos;re not on the site.
+          </p>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            {!push.registered ? (
+              <button
+                type="button"
+                onClick={handleEnablePush}
+                disabled={push.loading}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {push.loading ? "Enabling…" : "Enable push notifications"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleTestPush}
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                >
+                  Send test notification
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDisablePush}
+                  className="rounded-xl border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Disable
+                </button>
+              </>
+            )}
+          </div>
+
+          {pushStatus && (
+            <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{pushStatus}</p>
+          )}
+
+          {push.permission === "denied" && (
+            <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+              Notifications are blocked in your browser settings. Enable them in your browser&apos;s
+              site permissions to use push notifications.
+            </p>
+          )}
+        </section>
+
         {/* Deal alert channels */}
-        <section className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Alert channels</h2>
             {!isHunter && (
