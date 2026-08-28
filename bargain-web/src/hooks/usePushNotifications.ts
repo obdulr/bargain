@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { initMessaging, requestNotificationPermission, getFCMToken, onMessageListener } from "@/lib/firebase";
-import { authService } from "@/lib/authService";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.bargainhuntrs.com";
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("bargain_auth_token");
+}
 
 export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>("default");
@@ -19,15 +23,15 @@ export function usePushNotifications() {
   }, []);
 
   const registerToken = useCallback(async (fcmToken: string) => {
-    const authData = authService.getStoredAuth();
-    if (!authData?.access_token) return false;
+    const authToken = getAuthToken();
+    if (!authToken) return false;
 
     try {
       const res = await fetch(`${API_URL}/api/v1/notifications/push/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${authData.access_token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({ token: fcmToken }),
       });
@@ -65,14 +69,14 @@ export function usePushNotifications() {
   }, [registerToken]);
 
   const disable = useCallback(async () => {
-    const authData = authService.getStoredAuth();
-    if (!authData?.access_token) return;
+    const authToken = getAuthToken();
+    if (!authToken) return;
 
     try {
       await fetch(`${API_URL}/api/v1/notifications/push/unregister`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${authData.access_token}`,
+          Authorization: `Bearer ${authToken}`,
         },
       });
       setRegistered(false);
@@ -83,15 +87,15 @@ export function usePushNotifications() {
   }, []);
 
   const sendTest = useCallback(async () => {
-    const authData = authService.getStoredAuth();
-    if (!authData?.access_token) return null;
+    const authToken = getAuthToken();
+    if (!authToken) return null;
 
     try {
       const res = await fetch(`${API_URL}/api/v1/notifications/push/test`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${authData.access_token}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           title: "🔥 Test Deal Alert",
