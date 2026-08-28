@@ -1,9 +1,9 @@
-name: Health Check
+name: Health Check & Keep-Alive
 
 on:
   schedule:
-    # Every 6 hours
-    - cron: '0 */6 * * *'
+    # Every 10 minutes — keeps Render free-tier services awake
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -11,15 +11,32 @@ permissions:
 
 jobs:
   health-check:
-    name: Check production endpoints
+    name: Ping production endpoints
     runs-on: ubuntu-latest
     steps:
-      - name: API health
+      - name: Ping API
         run: |
-          echo "Checking Bargain API..."
-          curl -sf -o /dev/null -w "%{http_code}\n" https://api.bargainhuntrs.com/health || echo "API health check failed"
+          echo "Pinging Bargain API..."
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" https://api.bargainhuntrs.com/health || echo "000")
+          echo "API health: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::API health check failed ($STATUS)"
+          fi
 
-      - name: Web health
+      - name: Ping Web
         run: |
-          echo "Checking Bargain web..."
-          curl -sf -o /dev/null -w "%{http_code}\n" https://bargain-web.onrender.com || echo "Web health check failed"
+          echo "Pinging Bargain web..."
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" https://bargain-web.onrender.com || echo "000")
+          echo "Web health: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Web health check failed ($STATUS)"
+          fi
+
+      - name: Ping custom domain
+        run: |
+          echo "Pinging www.bargainhuntrs.com..."
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" https://www.bargainhuntrs.com || echo "000")
+          echo "Web (www): $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Web www health check failed ($STATUS)"
+          fi
