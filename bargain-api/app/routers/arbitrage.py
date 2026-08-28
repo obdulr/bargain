@@ -1350,14 +1350,10 @@ def _save_opportunity(db: Session, opp: ArbitrageOpportunity) -> ArbitrageDeal:
 
 def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
     """Convert an ArbitrageDeal model to a DealResponse."""
-    # Filter out broken Amazon image URLs (ASIN-based URLs don't work)
     image_url = deal.image_url
-    if image_url and "m.media-amazon.com/images/I/" in image_url:
-        # Check if it's a valid Amazon image ID (starts with a number, not B0)
-        img_part = image_url.split("/images/I/")[-1].split(".")[0]
-        if img_part.startswith("B0") and len(img_part) == 10:
-            # This is an ASIN, not an image ID — Amazon will return 400
-            image_url = None
+    # Don't filter out Amazon image URLs — ASIN-based URLs like
+    # https://m.media-amazon.com/images/I/B0HCRVD7VP._AC_SL240_.jpg
+    # are valid image URLs that Amazon serves correctly.
 
     return DealResponse(
         id=str(deal.id),
