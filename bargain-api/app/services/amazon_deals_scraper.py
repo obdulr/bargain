@@ -744,7 +744,7 @@ async def update_missing_images(db_session, max_updates: int = 20) -> int:
         .filter(
             ArbitrageDeal.status == "active",
             ArbitrageDeal.retailer == "amazon",
-            (ArbitrageDeal.image_url == None) | (ArbitrageDeal.image_url == ""),
+            ArbitrageDeal.image_url.is_(None) | (ArbitrageDeal.image_url == ""),
         )
         .limit(max_updates)
         .all()
