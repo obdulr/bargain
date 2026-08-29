@@ -105,33 +105,64 @@ def _build_embed(
 
 
 async def post_to_webhook(webhook_url: str, embed: dict) -> dict:
-    """Post an embed to a single Discord webhook."""
-    try:
-        payload = {
-            "username": "BargainHuntrs",
-            "embeds": [embed],
-        }
+    """Post an embed to a single Discord webhook.
 
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "BargainHuntrs/1.0 (https://www.bargainhuntrs.com)",
-            "Accept": "application/json",
-        }
+    Includes retry logic with exponential backoff for Cloudflare
+    rate limits (error 1015), which can affect shared hosting IPs.
+    """
+    import asyncio
 
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.post(webhook_url, json=payload, headers=headers)
+    payload = {
+        "username": "BargainHuntrs",
+        "embeds": [embed],
+    }
 
-            if resp.status_code in (200, 204):
-                logger.info("Discord: posted to webhook successfully")
-                return {"status": "success"}
-            else:
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "BargainHuntrs/1.0 (https://www.bargainhuntrs.com)",
+        "Accept": "application/json",
+    }
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                resp = await client.post(webhook_url, json=payload, headers=headers)
+
+                if resp.status_code in (200, 204):
+                    logger.info(f"Discord: posted to webhook successfully (attempt {attempt+1})")
+                    return {"status": "success"}
+
+                if resp.status_code == 429:
+                    # Check for Retry-After header (seconds)
+                    retry_after = resp.headers.get("Retry-After", "5")
+                    try:
+                        wait = min(float(retry_after), 30.0)
+                    except ValueError:
+                        wait = 5.0 * (attempt + 1)
+
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Discord: 429 rate limited, retrying in {wait}s (attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait)
+                        continue
+
+                    error_text = resp.text[:200]
+                    logger.warning(f"Discord: rate limited after {max_retries} retries: {error_text}")
+                    return {"status": "error", "error": f"HTTP 429 rate limited (retried {max_retries}x): {error_text}"}
+
                 error_text = resp.text[:200]
                 logger.warning(f"Discord: webhook failed {resp.status_code}: {error_text}")
                 return {"status": "error", "error": f"HTTP {resp.status_code}: {error_text}"}
 
-    except Exception as e:
-        logger.error(f"Discord: webhook error: {e}")
-        return {"status": "error", "error": str(e)}
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Discord: error on attempt {attempt+1}, retrying: {e}")
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            logger.error(f"Discord: webhook error after {max_retries} retries: {e}")
+            return {"status": "error", "error": str(e)}
+
+    return {"status": "error", "error": "Max retries exceeded"}
 
 
 async def post_deal_to_discord(
