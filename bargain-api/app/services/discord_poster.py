@@ -112,8 +112,14 @@ async def post_to_webhook(webhook_url: str, embed: dict) -> dict:
             "embeds": [embed],
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(webhook_url, json=payload)
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "BargainHuntrs/1.0 (https://www.bargainhuntrs.com)",
+            "Accept": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.post(webhook_url, json=payload, headers=headers)
 
             if resp.status_code in (200, 204):
                 logger.info("Discord: posted to webhook successfully")
