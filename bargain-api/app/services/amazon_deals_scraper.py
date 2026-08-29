@@ -189,6 +189,10 @@ def _parse_deal_from_link(link) -> Optional[AmazonDeal]:
         image_url = img.get("src") or img.get("data-src") or ""
         if image_url and not image_url.startswith("http"):
             image_url = urljoin("https://www.amazon.com", image_url)
+        # Reject B0-format Amazon image URLs — Amazon returns HTTP 400
+        # for these ASIN-based image IDs (e.g. /images/I/B0HCRVD7VP._AC_SL240_.jpg)
+        if image_url and "/images/I/B0" in image_url:
+            image_url = None
 
     # Deal type
     deal_type = "deal"
@@ -443,6 +447,9 @@ def _parse_trending_from_link(link, source: str = "trending") -> Optional[Amazon
         image_url = img.get("src") or img.get("data-src") or ""
         if image_url and not image_url.startswith("http"):
             image_url = urljoin("https://www.amazon.com", image_url)
+        # Reject B0-format Amazon image URLs — Amazon returns HTTP 400
+        if image_url and "/images/I/B0" in image_url:
+            image_url = None
 
     is_prime = "prime" in container_lower
 
