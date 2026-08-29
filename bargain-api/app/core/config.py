@@ -153,6 +153,28 @@ class Settings(BaseSettings):
     BUFFER_POST_TIMEZONE: str = "America/New_York"
     BUFFER_POSTS_PER_WINDOW: int = 1
 
+    # ─── Direct Social Posting (bypass Buffer) ───────────────────────
+    # X/Twitter direct API v2 (free tier: 1,500 posts/month)
+    # Get credentials: https://developer.x.com/en/portal/dashboard
+    X_API_KEY: str = ""
+    X_API_SECRET: str = ""
+    X_ACCESS_TOKEN: str = ""
+    X_ACCESS_TOKEN_SECRET: str = ""
+    X_BEARER_TOKEN: str = ""
+
+    # Reddit API (free, instant approval)
+    # Get credentials: https://www.reddit.com/prefs/apps (create "script" app)
+    REDDIT_CLIENT_ID: str = ""
+    REDDIT_CLIENT_SECRET: str = ""
+    REDDIT_USERNAME: str = ""
+    REDDIT_PASSWORD: str = ""
+    REDDIT_USER_AGENT: str = "bargainhuntrs/1.0"
+    REDDIT_SUBREDDITS: str = "deals,buildapcsales,DealsReddit"
+
+    # Discord webhooks (comma-separated for multiple channels)
+    # Setup: Discord server → Channel Settings → Integrations → Webhooks
+    DISCORD_WEBHOOK_URL: str = ""
+
     # Fallback image used when a deal has no/invalid image URL
     FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
 

@@ -134,31 +134,24 @@ def build_rich_message(deal: DealInfo) -> str:
 # ─── Discord ────────────────────────────────────────────────────────────────
 
 async def send_discord(deal: DealInfo) -> bool:
-    """Post deal to Discord via webhook."""
+    """Post deal to Discord via webhook (rich embed)."""
     if not settings.DISCORD_WEBHOOK_URL:
         logger.debug("Discord webhook not configured, skipping")
         return False
 
-    payload = {
-        "content": build_rich_message(deal),
-        "username": "BargainHuntrs Deal Bot",
-    }
+    from app.services.discord_poster import post_deal_to_discord
 
-    if deal.image_url:
-        payload["embeds"] = [{
-            "image": {"url": deal.image_url},
-            "color": 0xF59E0B if deal.is_glitch else 0x10B981,
-        }]
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(settings.DISCORD_WEBHOOK_URL, json=payload)
-            response.raise_for_status()
-            logger.info(f"Discord: posted deal {deal.asin}")
-            return True
-        except Exception as e:
-            logger.error(f"Discord: failed to post {deal.asin}: {e}")
-            return False
+    result = await post_deal_to_discord(
+        title=deal.title,
+        deal_price=float(deal.deal_price) if deal.deal_price else 0,
+        original_price=float(deal.original_price) if deal.original_price else None,
+        discount_percent=int(deal.discount_percent) if deal.discount_percent else 0,
+        retailer=deal.retailer or "amazon",
+        deal_url=deal.deal_url or "",
+        image_url=deal.image_url,
+        deal_tier="glitch" if deal.is_glitch else "clearance",
+    )
+    return result.get("status") == "success"
 
 
 # ─── Telegram ───────────────────────────────────────────────────────────────
@@ -295,10 +288,46 @@ async def distribute_deal(
     channels: dict[str, asyncio.Task] = {}
 
     # Social channels (broadcast to everyone)
+    # Discord webhook (new rich embed poster)
     if settings.DISCORD_WEBHOOK_URL:
         channels["discord"] = asyncio.create_task(send_discord(deal))
     if settings.TELEGRAM_BOT_TOKEN:
         channels["telegram"] = asyncio.create_task(send_telegram(deal))
+
+    # X/Twitter: try direct API v2 first (no queue limits), fall back to Buffer
+    # The direct poster is in x_direct_poster.py; Buffer is in x_poster.py
+    # We run both if configured — direct posts immediately, Buffer queues for IG/FB
+    from app.services import x_direct_poster, reddit_poster, discord_poster
+
+    # Compute discount % from buy/sell price
+    discount_pct = 0
+    if deal.sell_price and deal.buy_price and deal.sell_price > deal.buy_price:
+        discount_pct = int(round((1 - float(deal.buy_price) / float(deal.sell_price)) * 100))
+
+    # Common kwargs for all direct posters
+    poster_kwargs = {
+        "title": deal.title,
+        "deal_price": float(deal.buy_price) if deal.buy_price else 0,
+        "original_price": float(deal.sell_price) if deal.sell_price else None,
+        "discount_percent": discount_pct,
+        "retailer": "amazon",  # DealInfo doesn't carry retailer; default
+        "deal_url": deal.buy_url or "",
+        "image_url": deal.image_url,
+        "deal_tier": "glitch" if deal.is_glitch else (deal.deal_tier or "clearance"),
+    }
+
+    if x_direct_poster.is_configured():
+        channels["x_direct"] = asyncio.create_task(
+            x_direct_poster.post_deal_to_x_direct(**poster_kwargs)
+        )
+
+    # Reddit (post to r/deals, r/buildapcsales, etc.)
+    if reddit_poster.is_configured():
+        channels["reddit"] = asyncio.create_task(
+            reddit_poster.post_deal_to_reddit(**poster_kwargs)
+        )
+
+    # Legacy Twitter/Facebook (kept for backward compat)
     if settings.TWITTER_API_KEY:
         channels["twitter"] = asyncio.create_task(send_twitter(deal))
     if settings.FACEBOOK_PAGE_ACCESS_TOKEN:

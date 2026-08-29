@@ -602,6 +602,81 @@ async def test_buffer_post_public(
     }
 
 
+@router.post("/deals/test-social/public", response_model=dict)
+async def test_social_posting_public(
+    db: Session = Depends(get_db),
+):
+    """Test all direct social posting channels — no auth required.
+
+    Tests X direct API, Reddit, and Discord webhook posting using
+    the most recent active deal. Returns per-channel results.
+    Does NOT mark the deal as alerted.
+    """
+    from app.services import x_direct_poster, reddit_poster, discord_poster
+
+    deal = (
+        db.query(ArbitrageDeal)
+        .filter(
+            ArbitrageDeal.status == "active",
+            ArbitrageDeal.is_profitable == True,
+        )
+        .order_by(ArbitrageDeal.detected_at.desc())
+        .first()
+    )
+    if not deal:
+        return {"status": "error", "error": "No active deals to test with"}
+
+    discount = 0
+    if deal.historical_avg and deal.historical_avg > deal.buy_price:
+        discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+    deal_kwargs = {
+        "title": deal.title,
+        "deal_price": float(deal.buy_price),
+        "original_price": float(deal.historical_avg) if deal.historical_avg else None,
+        "discount_percent": discount,
+        "retailer": getattr(deal, "retailer", None) or "amazon",
+        "deal_url": deal.buy_url or "",
+        "image_url": deal.image_url,
+        "deal_tier": deal.deal_tier,
+    }
+
+    results: dict = {"deal_used": str(deal.id), "channels": {}}
+
+    # X direct
+    if x_direct_poster.is_configured():
+        x_result = await x_direct_poster.post_deal_to_x_direct(**deal_kwargs)
+        results["channels"]["x_direct"] = x_result
+    else:
+        results["channels"]["x_direct"] = {"status": "skipped", "error": "Not configured"}
+
+    # Reddit
+    if reddit_poster.is_configured():
+        reddit_result = await reddit_poster.post_deal_to_reddit(**deal_kwargs)
+        results["channels"]["reddit"] = reddit_result
+    else:
+        results["channels"]["reddit"] = {"status": "skipped", "error": "Not configured"}
+
+    # Discord
+    if discord_poster.is_configured():
+        discord_result = await discord_poster.post_deal_to_discord(**deal_kwargs)
+        results["channels"]["discord"] = discord_result
+    else:
+        results["channels"]["discord"] = {"status": "skipped", "error": "Not configured"}
+
+    # Summary
+    posted = sum(1 for v in results["channels"].values() if v.get("status") == "success")
+    failed = sum(1 for v in results["channels"].values() if v.get("status") == "error")
+    skipped = sum(1 for v in results["channels"].values() if v.get("status") == "skipped")
+    results["summary"] = {
+        "posted": posted,
+        "failed": failed,
+        "skipped": skipped,
+    }
+
+    return results
+
+
 @router.post("/deals/update-images/public", response_model=dict)
 async def update_deal_images_public(
     max_updates: int = Query(10, le=20),
