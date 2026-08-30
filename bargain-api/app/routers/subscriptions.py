@@ -100,8 +100,10 @@ async def cancel_subscription(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Cancel the current user's Stripe subscription at period end."""
-    subscription_id = body.subscription_id or current_user.stripe_subscription_id
+    """Cancel the current user's Stripe subscription at period end.
+    Always uses the current user's own subscription — ignores any
+    subscription_id from the request body to prevent IDOR."""
+    subscription_id = current_user.stripe_subscription_id
     if not subscription_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

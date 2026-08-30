@@ -67,6 +67,26 @@ async def _upload_media(image_url: str, client: httpx.AsyncClient) -> Optional[s
     it to X's media endpoint.
     """
     try:
+        # Security: validate image URL to prevent SSRF
+        from urllib.parse import urlparse
+        import ipaddress
+        parsed = urlparse(image_url)
+        if parsed.scheme not in ("http", "https"):
+            logger.warning(f"X direct: rejecting non-http image URL")
+            return None
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return None
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                logger.warning(f"X direct: rejecting internal IP image URL")
+                return None
+        except ValueError:
+            pass
+        if hostname in ("169.254.169.254", "metadata.google.internal", "metadata.azure.com"):
+            return None
+
         # Download the image
         img_resp = await client.get(image_url, timeout=15.0)
         if img_resp.status_code != 200:

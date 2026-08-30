@@ -159,8 +159,7 @@ async def referral_leaderboard(
         {
             "rank": idx + 1,
             "user_id": str(u.id),
-            "name": u.full_name if hasattr(u, "full_name") else u.email,
-            "email": u.email,
+            "name": u.full_name if hasattr(u, "full_name") else f"User{str(u.id)[:8]}",
             "referral_count": u.referral_count or 0,
             "aura_points": u.aura_points or 0,
             "aura_tier": u.aura_tier or "hunter",

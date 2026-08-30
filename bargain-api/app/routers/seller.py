@@ -134,18 +134,21 @@ async def apply_as_seller(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Apply to become a verified seller. Auto-approves for now (admin can revoke later)."""
-    current_user.is_verified_seller = True
+    """Apply to become a verified seller. Creates a pending application
+    that must be approved by an admin before the user can post deals/coupons."""
+    current_user.is_verified_seller = False  # Pending — admin must approve
     current_user.seller_store_name = body.store_name
     current_user.seller_website = body.website
 
     db.commit()
     db.refresh(current_user)
 
-    logger.info(f"User {current_user.email} approved as seller: {body.store_name}")
+    logger.info(f"User {current_user.email} applied as seller: {body.store_name} (pending approval)")
 
     return {
         "success": True,
+        "status": "pending",
+        "message": "Your seller application has been submitted and is pending admin approval.",
         "seller_profile": {
             "is_verified_seller": current_user.is_verified_seller,
             "seller_store_name": current_user.seller_store_name,

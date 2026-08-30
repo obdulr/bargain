@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import bcrypt
 from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -19,7 +19,8 @@ from app.services.email_service import send_welcome_email, send_password_reset_e
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 
-ACCESS_TOKEN_EXPIRE_SECONDS = 30 * 24 * 60 * 60  # 30 days like Prime
+ACCESS_TOKEN_EXPIRE_SECONDS = 60 * 60  # 1 hour (was 30 days — too long)
+REFRESH_TOKEN_EXPIRE_DAYS = 14  # 14 days (was 60)
 
 
 class RegisterRequest(BaseModel):
@@ -28,6 +29,21 @@ class RegisterRequest(BaseModel):
     firstName: str | None = None
     lastName: str | None = None
     referralCode: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if len(v) > 128:
+            raise ValueError("Password must be at most 128 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        return v
 
 
 class LoginRequest(BaseModel):
@@ -78,7 +94,7 @@ def create_access_token(user_id: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=60)
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {"sub": str(user_id), "type": "refresh", "exp": expire}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -356,6 +372,21 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if len(v) > 128:
+            raise ValueError("Password must be at most 128 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        return v
+
 
 @router.post("/forgot-password")
 async def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
@@ -389,6 +420,8 @@ async def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="User not found")
 
     user.hashed_password = hash_password(body.new_password)
+    # Invalidate all existing refresh tokens after password reset
+    user.refresh_token = None
     db.commit()
 
     return {"success": True, "message": "Password reset successfully."}

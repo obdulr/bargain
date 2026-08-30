@@ -56,6 +56,18 @@ class SubmitDealRequest(BaseModel):
             raise ValueError("Field cannot be empty")
         return v.strip()
 
+    @field_validator("url")
+    @classmethod
+    def must_be_https(cls, v):
+        """Reject javascript:, data:, and other unsafe URL schemes to prevent XSS."""
+        from urllib.parse import urlparse
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must start with http:// or https://")
+        if not parsed.hostname:
+            raise ValueError("URL must have a valid hostname")
+        return v
+
 
 class VoteRequest(BaseModel):
     vote: int  # 1 = upvote, -1 = downvote
@@ -445,8 +457,7 @@ async def leaderboard(
         {
             "rank": idx + 1,
             "user_id": str(u.id),
-            "name": u.full_name if hasattr(u, "full_name") else u.email,
-            "email": u.email,
+            "name": u.full_name if hasattr(u, "full_name") else f"User{str(u.id)[:8]}",
             "aura_points": u.aura_points or 0,
             "aura_tier": u.aura_tier or "hunter",
             "deals_submitted": deal_count_map.get(u.id, 0),

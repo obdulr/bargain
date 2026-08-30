@@ -4,8 +4,9 @@ Coupon API Router
 Endpoints for browsing, searching, scraping, and applying coupon codes.
 """
 
+import os
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -224,11 +225,19 @@ async def get_coupon(
 @router.post("/scrape/public", response_model=ScrapeResponse)
 async def trigger_scrape_public(
     db: Session = Depends(get_db),
+    x_cron_secret: Optional[str] = Header(None),
 ):
-    """Public endpoint to scrape coupons — no auth required.
+    """Public endpoint to scrape coupons — protected by cron secret.
 
     Fetches real promo codes from the Impact affiliate network API.
     """
+    expected = os.getenv("SCRAPE_CRON_SECRET")
+    if not expected or x_cron_secret != expected:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or missing cron secret.",
+        )
+
     if not is_coupon_source_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -425,7 +434,9 @@ async def delete_all_coupons(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete all coupons. Useful for clearing stale/fake data."""
+    """Delete all coupons. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required.")
     count = db.query(CouponCode).count()
     db.query(CouponCode).delete()
     db.commit()
@@ -438,10 +449,16 @@ async def delete_coupon(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete a coupon (mark as expired)."""
+    """Delete a coupon (mark as expired). Admin or coupon owner only."""
     coupon = db.query(CouponCode).filter(CouponCode.id == coupon_id).first()
     if not coupon:
         raise HTTPException(status_code=404, detail="Coupon not found")
+
+    # Only admin or the user who submitted the coupon can delete
+    is_admin = getattr(current_user, "is_admin", False)
+    coupon_owner = getattr(coupon, "submitted_by", None)
+    if not is_admin and str(coupon_owner) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this coupon.")
 
     coupon.status = "expired"
     db.commit()

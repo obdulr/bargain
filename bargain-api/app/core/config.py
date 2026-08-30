@@ -27,12 +27,18 @@ class Settings(BaseSettings):
     
     # API
     API_V1_PREFIX: str = "/api/v1"
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = ""  # Must be set via env var — no insecure default
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # CORS (Render frontend URL will be added dynamically)
-    ALLOWED_ORIGINS: List[str] = ["*"]
+
+    # CORS — explicit origins only, never wildcard with credentials
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3030",
+        "https://www.bargainhuntrs.com",
+        "https://bargainhuntrs.com",
+        "https://bargain-mhi3.onrender.com",
+        "https://bargain-web.onrender.com",
+    ]
     
     # Stripe
     STRIPE_API_KEY: str = ""

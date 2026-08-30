@@ -44,6 +44,39 @@ async def add_watchlist_item(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Security: validate URL to prevent SSRF
+    from urllib.parse import urlparse
+    import ipaddress
+
+    parsed = urlparse(body.retailer_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only http/https URLs are allowed.",
+        )
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid URL — no hostname.",
+        )
+    # Block internal/private IPs and cloud metadata endpoints
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Internal/private IPs are not allowed.",
+            )
+    except ValueError:
+        pass  # hostname is a domain, not an IP — allowed
+    # Block cloud metadata endpoints
+    if hostname in ("169.254.169.254", "metadata.google.internal", "metadata.azure.com"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Metadata endpoints are not allowed.",
+        )
+
     # Enforce watchlist limit for free users (10 items max)
     tier = (current_user.subscription_tier or "free").lower()
     if tier == "free":

@@ -14,10 +14,15 @@ except ImportError:
 from app.services.scheduler import scheduler
 from app.core.config import settings
 
+import os
 app = FastAPI(
     title="BargainHuntrs API",
     description="Arbitrage intelligence platform API",
     version="0.1.0",
+    # Disable docs in production to reduce attack surface
+    docs_url=None if os.getenv("ENVIRONMENT", "production") == "production" else "/docs",
+    redoc_url=None if os.getenv("ENVIRONMENT", "production") == "production" else "/redoc",
+    openapi_url=None if os.getenv("ENVIRONMENT", "production") == "production" else "/openapi.json",
 )
 
 # Add CORS middleware — fail fast if ALLOWED_ORIGINS is misconfigured (no wildcard fallback)
@@ -35,8 +40,8 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     return response
 
@@ -71,6 +76,15 @@ app.include_router(resale.router)
 @app.on_event("startup")
 async def startup_event():
     """Start the background scanner on app startup if AUTO_SCAN is enabled."""
+    # Security: fail fast if SECRET_KEY is missing or too short (skip in test mode)
+    if os.getenv("ENVIRONMENT") != "test" and os.getenv("PYTEST_CURRENT_TEST") is None:
+        if not settings.SECRET_KEY or len(settings.SECRET_KEY) < 32:
+            raise RuntimeError(
+                "SECRET_KEY must be set to a strong random value (>=32 chars) "
+                "via environment variable. Generate with: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+
     if settings.AUTO_SCAN:
         scheduler.start()
         print(f"[Startup] Auto-scan enabled — scheduler started (interval: {settings.SCAN_INTERVAL_MINUTES}min)")

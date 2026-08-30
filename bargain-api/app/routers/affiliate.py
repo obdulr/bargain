@@ -50,6 +50,20 @@ async def track_click(
     clicker unless an explicit ``user_id`` is supplied (admin override).
     """
     url = body.url or ""
+    # Security: reject non-http(s) URLs to prevent open redirect and XSS
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must start with http:// or https://",
+        )
+    if not parsed.hostname:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must have a valid hostname",
+        )
+
     retailer = body.retailer or detect_retailer(url)
     asin = body.asin or ""
 
@@ -110,6 +124,20 @@ async def track_click_public(
     affiliate links and generate revenue.
     """
     url = body.url or ""
+    # Security: reject non-http(s) URLs to prevent open redirect and XSS
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must start with http:// or https://",
+        )
+    if not parsed.hostname:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must have a valid hostname",
+        )
+
     retailer = body.retailer or detect_retailer(url)
     asin = body.asin or ""
 

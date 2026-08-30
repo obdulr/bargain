@@ -66,8 +66,15 @@ async def notification_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """View notification send history."""
+    """View notification send history. Non-admin users see only their own notifications."""
     query = db.query(NotificationLog)
+
+    # Non-admin users only see their own notifications (filtered by recipient)
+    is_admin = getattr(current_user, "is_admin", False)
+    if not is_admin:
+        # Filter to notifications sent to this user's email or FCM token
+        user_email = current_user.email or ""
+        query = query.filter(NotificationLog.recipient == user_email)
 
     if channel:
         query = query.filter(NotificationLog.channel == channel)
@@ -82,7 +89,8 @@ async def notification_history(
             id=str(log.id),
             asin=log.asin,
             channel=log.channel,
-            recipient=log.recipient,
+            # Redact recipient for non-admin users
+            recipient=log.recipient if is_admin else "***",
             status=log.status,
             error=log.error,
             sent_at=log.sent_at.isoformat() if log.sent_at else None,
@@ -97,7 +105,9 @@ async def test_notification(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Send a test notification to all configured channels."""
+    """Send a test notification to all configured channels. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required to send test notifications.")
     test_deal = DealInfo(
         asin="TEST001",
         title="Test Deal — Notification System Check",
@@ -120,7 +130,9 @@ async def distribute_existing_deal(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Manually distribute an existing arbitrage deal to all notification channels."""
+    """Manually distribute an existing arbitrage deal to all notification channels. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required to distribute deals.")
     deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")

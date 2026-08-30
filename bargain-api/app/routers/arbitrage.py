@@ -7,7 +7,8 @@ Endpoints for scanning, viewing, and managing arbitrage opportunities.
 from decimal import Decimal
 import asyncio
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -18,6 +19,22 @@ from app.db.session import get_db
 from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot
 from app.core.config import settings
 from app.routers.auth import get_current_user
+
+
+def _verify_cron_secret(x_cron_secret: Optional[str] = Header(None)):
+    """Protect public scrape endpoints with a shared secret.
+    Set SCRAPE_CRON_SECRET env var and pass it as X-Cron-Secret header."""
+    expected = os.getenv("SCRAPE_CRON_SECRET")
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Scrape endpoints are not configured. Set SCRAPE_CRON_SECRET.",
+        )
+    if x_cron_secret != expected:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or missing cron secret.",
+        )
 from app.services.arbitrage import (
     find_arbitrage_for_asin,
     scan_amazon_for_arbitrage,
@@ -191,6 +208,7 @@ async def scrape_amazon_deals_endpoint(
 async def scrape_amazon_deals_public(
     max_deals: int = Query(50, le=100),
     db: Session = Depends(get_db),
+    _: None = Depends(_verify_cron_secret),
 ):
     """Public endpoint to scrape Amazon's Today's Deals — no auth required.
 
@@ -218,6 +236,7 @@ async def scrape_walmart_deals_public(
     max_deals: int = Query(50, le=100),
     min_discount: int = Query(15, ge=0, le=90),
     db: Session = Depends(get_db),
+    _: None = Depends(_verify_cron_secret),
 ):
     """Public endpoint to scrape Walmart's deals hub — no auth required.
 
@@ -246,6 +265,7 @@ async def scrape_walmart_deals_public(
 async def scrape_slickdeals_public(
     min_discount: int = Query(40, ge=0, le=90),
     db: Session = Depends(get_db),
+    _: None = Depends(_verify_cron_secret),
 ):
     """Public endpoint to scrape Slickdeals RSS — no auth required.
 
@@ -272,6 +292,7 @@ async def scrape_slickdeals_public(
 @router.post("/deals/scrape-all/public", response_model=dict)
 async def scrape_all_deals_public(
     db: Session = Depends(get_db),
+    _: None = Depends(_verify_cron_secret),
 ):
     """Public endpoint to scrape all deal sources — no auth required.
 
