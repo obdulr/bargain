@@ -616,6 +616,52 @@ class ScanScheduler:
             except Exception as e:
                 logger.error(f"Discord posting failed: {e}", exc_info=True)
 
+            # ─── Post best deal to Pinterest directly ──────────────────────
+            try:
+                from app.services.pinterest_poster import post_deal_to_pinterest, is_configured as pinterest_configured
+
+                if pinterest_configured():
+                    # Get the top deal that hasn't been posted yet
+                    pinterest_candidate = (
+                        db.query(ArbitrageDeal)
+                        .filter(
+                            ArbitrageDeal.status == "active",
+                            ArbitrageDeal.is_profitable == True,
+                        )
+                        .order_by(
+                            ArbitrageDeal.score.desc(),
+                            ArbitrageDeal.detected_at.desc(),
+                        )
+                        .first()
+                    )
+
+                    if pinterest_candidate:
+                        discount = 0
+                        if pinterest_candidate.historical_avg and pinterest_candidate.historical_avg > pinterest_candidate.buy_price:
+                            discount = int(round((1 - float(pinterest_candidate.buy_price) / float(pinterest_candidate.historical_avg)) * 100))
+
+                        result = await post_deal_to_pinterest(
+                            title=pinterest_candidate.title,
+                            deal_price=float(pinterest_candidate.buy_price),
+                            original_price=float(pinterest_candidate.historical_avg) if pinterest_candidate.historical_avg else None,
+                            discount_percent=discount,
+                            retailer=getattr(pinterest_candidate, "retailer", None) or "amazon",
+                            deal_url=pinterest_candidate.buy_url or "",
+                            image_url=pinterest_candidate.image_url,
+                            deal_tier=pinterest_candidate.deal_tier,
+                        )
+
+                        if result.get("status") == "success":
+                            logger.info(f"  Pinterest posted: {pinterest_candidate.title[:50]} (pin: {result.get('pin_id')})")
+                        else:
+                            logger.warning(f"  Pinterest post failed: {result.get('error')}")
+                    else:
+                        logger.info("No deals to post to Pinterest this cycle")
+                else:
+                    logger.info("Pinterest not configured, skipping")
+            except Exception as e:
+                logger.error(f"Pinterest posting failed: {e}", exc_info=True)
+
             # ─── Send deal alerts to users via email + push ─────────────────
             try:
                 from app.services.notification_service import distribute_deal, DealInfo

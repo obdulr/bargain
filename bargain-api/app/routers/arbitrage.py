@@ -633,7 +633,7 @@ async def test_social_posting_public(
     the most recent active deal. Returns per-channel results.
     Does NOT mark the deal as alerted.
     """
-    from app.services import x_direct_poster, reddit_poster, discord_poster
+    from app.services import x_direct_poster, reddit_poster, discord_poster, pinterest_poster
 
     deal = (
         db.query(ArbitrageDeal)
@@ -684,6 +684,13 @@ async def test_social_posting_public(
         results["channels"]["discord"] = discord_result
     else:
         results["channels"]["discord"] = {"status": "skipped", "error": "Not configured"}
+
+    # Pinterest
+    if pinterest_poster.is_configured():
+        pinterest_result = await pinterest_poster.post_deal_to_pinterest(**deal_kwargs)
+        results["channels"]["pinterest"] = pinterest_result
+    else:
+        results["channels"]["pinterest"] = {"status": "skipped", "error": "Not configured"}
 
     # Summary
     posted = sum(1 for v in results["channels"].values() if v.get("status") == "success")

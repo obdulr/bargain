@@ -184,6 +184,11 @@ class Settings(BaseSettings):
     # Deploy the worker from cloudflare-worker/discord-proxy.js
     DISCORD_PROXY_URL: str = ""
 
+    # Pinterest API v5 (free, instant approval)
+    # Get credentials: https://developers.pinterest.com/
+    PINTEREST_ACCESS_TOKEN: str = ""
+    PINTEREST_BOARD_ID: str = ""
+
     # Fallback image used when a deal has no/invalid image URL
     FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"
 
