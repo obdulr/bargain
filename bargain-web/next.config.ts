@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
         {
           key: 'Content-Security-Policy',
-          value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://api.bargainhuntrs.com https://www.bargainhuntrs.com wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+          value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://api.bargainhuntrs.com https://www.bargainhuntrs.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://*.googletagmanager.com wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
         },
       ],
     }];
