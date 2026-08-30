@@ -1,12 +1,21 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
+// Cloudflare Pages sets CF_PAGES=1 automatically.
+// When building for CF Pages, use static export; otherwise use standalone (Render).
+const isCloudflarePages = process.env.CF_PAGES === "1" || process.env.OUTPUT_EXPORT === "1";
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://api.bargainhuntrs.com",
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
   },
-  output: "standalone",
+  output: isCloudflarePages ? "export" : "standalone",
+  // For static export, we need to set the base path and image config
+  ...(isCloudflarePages ? {
+    images: { unoptimized: true },
+    trailingSlash: true,
+  } : {}),
   async headers() {
     return [{
       source: '/(.*)',

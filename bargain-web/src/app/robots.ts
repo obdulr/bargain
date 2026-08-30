@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 
 const BASE_URL = "https://www.bargainhuntrs.com";
 
+export const dynamic = "force-static";
+
 /**
  * Generates /robots.txt — allows all crawlers and points at the sitemap.
  */

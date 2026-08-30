@@ -1,14 +1,11 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { addUtmParameters, getPublicDeal, type ArbitrageDeal } from "@/lib/api";
-
-type Props = {
-  params: Promise<{ id: string }>;
-};
 
 function retailerName(retailer?: string): string {
   if (!retailer) return "Amazon";
@@ -35,8 +32,8 @@ function retailerName(retailer?: string): string {
     ace_hardware: "Ace Hardware",
   };
   return (
-    map[retailer.toLowerCase()] ||
-    retailer.charAt(0).toUpperCase() + retailer.slice(1).replace(/_/g, " ")
+    map[retailer?.toLowerCase() || ""] ||
+    (retailer ? retailer.charAt(0).toUpperCase() + retailer.slice(1).replace(/_/g, " ") : "Amazon")
   );
 }
 
@@ -52,54 +49,67 @@ function formatDeal(deal: ArbitrageDeal) {
   return { discount, savings };
 }
 
-async function fetchDeal(id: string): Promise<ArbitrageDeal> {
-  try {
-    return await getPublicDeal(id);
-  } catch {
-    notFound();
+export default function DealPageClient() {
+  const router = useRouter();
+  const [deal, setDeal] = useState<ArbitrageDeal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    // Extract the deal ID from the URL pathname: /deals/:id
+    const pathParts = window.location.pathname.split("/");
+    const id = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+
+    if (!id || id === "detail") {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+
+    getPublicDeal(id)
+      .then((d) => {
+        setDeal(d);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
+        <Header />
+        <main className="flex-1 px-6 py-10">
+          <div className="mx-auto max-w-3xl">
+            <div className="h-6 w-32 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800" />
+            <div className="mt-6 h-80 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-900" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
   }
-}
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params;
-  const deal = await fetchDeal(id);
-  const { discount, savings } = formatDeal(deal);
-  const retailer = retailerName(deal.retailer);
+  if (error || !deal) {
+    return (
+      <div className="flex flex-col min-h-full bg-white dark:bg-zinc-950">
+        <Header />
+        <main className="flex-1 px-6 py-10">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Deal not found</h1>
+            <p className="mt-2 text-zinc-500">This deal may have expired or been removed.</p>
+            <Link href="/deals" className="mt-4 inline-block text-emerald-600 hover:underline">
+              ← Back to deals
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
-  const title = discount
-    ? `${discount}% OFF ${deal.title} - Bargain Huntrs`
-    : `${deal.title} - Bargain Huntrs`;
-
-  const description = savings
-    ? `$${deal.buy_price.toFixed(2)} (was $${deal.historical_avg!.toFixed(2)}) at ${retailer}. Save $${savings.toFixed(2)}.`
-    : `$${deal.buy_price.toFixed(2)} at ${retailer}.`;
-
-  const image = deal.image_url || "/logos/profile-icon-dark.png";
-
-  return {
-    title,
-    description,
-    openGraph: {
-      type: "website",
-      url: `/deals/${id}`,
-      title,
-      description,
-      images: [image],
-    },
-    twitter: {
-      card: "summary_large_image",
-      site: "@bargain4huntrs",
-      creator: "@bargain4huntrs",
-      title,
-      description,
-      images: [image],
-    },
-  };
-}
-
-export default async function DealPage({ params }: Props) {
-  const { id } = await params;
-  const deal = await fetchDeal(id);
   const { discount, savings } = formatDeal(deal);
   const retailer = retailerName(deal.retailer);
 
@@ -125,7 +135,7 @@ export default async function DealPage({ params }: Props) {
       "@type": "Offer",
       price: deal.buy_price.toFixed(2),
       priceCurrency: "USD",
-      url: deal.buy_url || `https://www.bargainhuntrs.com/deals/${id}`,
+      url: deal.buy_url || `https://www.bargainhuntrs.com/deals/${deal.id}`,
       availability: deal.status === "active" ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       priceValidUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     },
@@ -152,13 +162,11 @@ export default async function DealPage({ params }: Props) {
             <div className="flex flex-col gap-6 sm:flex-row">
               {deal.image_url ? (
                 <div className="relative aspect-square w-full max-w-[260px] flex-shrink-0 overflow-hidden rounded-xl bg-zinc-50 dark:bg-zinc-800">
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={deal.image_url}
                     alt={deal.title}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                    sizes="260px"
+                    className="h-full w-full object-cover"
                   />
                 </div>
               ) : (

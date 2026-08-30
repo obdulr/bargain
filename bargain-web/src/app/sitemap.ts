@@ -3,6 +3,8 @@ import type { MetadataRoute } from "next";
 const BASE_URL = "https://www.bargainhuntrs.com";
 const API_URL = "https://api.bargainhuntrs.com";
 
+export const dynamic = "force-static";
+
 interface ApiDeal {
   id: string;
   detected_at?: string;
