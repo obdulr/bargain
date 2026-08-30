@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
+import GoogleAnalytics from "@/app/components/GoogleAnalytics";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,27 +16,40 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "Bargain Huntrs - Discover Deals, Glitches & Price Drops";
+const title = "BargainHuntrs — Find It, Flip It, Profit";
 const description =
-  "Find the best Amazon, Walmart, Target, and eBay deals, price errors, and clearance bargains. Join our deal-hunting community.";
+  "Discover the best deals, discounts, and arbitrage opportunities from Amazon, Walmart, and more.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.bargainhuntrs.com"),
-  title,
+  title: {
+    default: title,
+    template: "%s | BargainHuntrs",
+  },
   description,
   openGraph: {
     type: "website",
+    siteName: "BargainHuntrs",
     url: "https://www.bargainhuntrs.com",
-    title,
-    description,
-    images: ["/og-image.png"],
+    title: "BargainHuntrs — Find It, Flip It, Profit",
+    description:
+      "Discover the best deals, discounts, and arbitrage opportunities from Amazon, Walmart, and more.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "BargainHuntrs — Find It, Flip It, Profit",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     site: "@bargain4huntrs",
     creator: "@bargain4huntrs",
-    title,
-    description,
+    title: "BargainHuntrs — Find It, Flip It, Profit",
+    description:
+      "Discover the best deals, discounts, and arbitrage opportunities from Amazon, Walmart, and more.",
     images: ["/og-image.png"],
   },
 };
@@ -74,6 +88,7 @@ export default function RootLayout({
         />
         <AuthProvider>{children}</AuthProvider>
         <PwaInstallPrompt />
+        <GoogleAnalytics />
       </body>
     </html>
   );
