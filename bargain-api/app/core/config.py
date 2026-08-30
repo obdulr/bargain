@@ -174,6 +174,9 @@ class Settings(BaseSettings):
     # Discord webhooks (comma-separated for multiple channels)
     # Setup: Discord server → Channel Settings → Integrations → Webhooks
     DISCORD_WEBHOOK_URL: str = ""
+    # Optional: Cloudflare Worker proxy URL to bypass Discord's IP ban on Render
+    # Deploy the worker from cloudflare-worker/discord-proxy.js
+    DISCORD_PROXY_URL: str = ""
 
     # Fallback image used when a deal has no/invalid image URL
     FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"

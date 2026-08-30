@@ -109,8 +109,12 @@ async def post_to_webhook(webhook_url: str, embed: dict) -> dict:
 
     Includes retry logic with exponential backoff for Cloudflare
     rate limits (error 1015), which can affect shared hosting IPs.
+
+    If DISCORD_PROXY_URL is set, routes the request through a
+    Cloudflare Worker proxy to bypass IP-level blocks.
     """
     import asyncio
+    from urllib.parse import quote
 
     payload = {
         "username": "BargainHuntrs",
@@ -123,11 +127,20 @@ async def post_to_webhook(webhook_url: str, embed: dict) -> dict:
         "Accept": "application/json",
     }
 
+    # Build the target URL — use proxy if configured
+    proxy_url = getattr(settings, "DISCORD_PROXY_URL", "") or ""
+    if proxy_url:
+        # Route through Cloudflare Worker proxy
+        target_url = f"{proxy_url}?webhook={quote(webhook_url, safe='')}"
+        logger.info(f"Discord: routing through proxy")
+    else:
+        target_url = webhook_url
+
     max_retries = 3
     for attempt in range(max_retries):
         try:
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                resp = await client.post(webhook_url, json=payload, headers=headers)
+                resp = await client.post(target_url, json=payload, headers=headers)
 
                 if resp.status_code in (200, 204):
                     logger.info(f"Discord: posted to webhook successfully (attempt {attempt+1})")
