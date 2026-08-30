@@ -561,6 +561,92 @@ class ScanScheduler:
             else:
                 logger.info("Social posting not configured (BUFFER_API_KEY not set)")
 
+            # ─── Post best deals to Discord directly ───────────────────────
+            try:
+                from app.services.discord_poster import post_deal_to_discord
+                from app.core.config import settings as cfg
+
+                if getattr(cfg, "DISCORD_WEBHOOK_URL", None):
+                    # Get top 3 deals that haven't been posted to Discord yet
+                    discord_candidates = (
+                        db.query(ArbitrageDeal)
+                        .filter(
+                            ArbitrageDeal.status == "active",
+                            ArbitrageDeal.is_profitable == True,
+                        )
+                        .order_by(
+                            ArbitrageDeal.score.desc(),
+                            ArbitrageDeal.detected_at.desc(),
+                        )
+                        .limit(3)
+                        .all()
+                    )
+
+                    discord_posted = 0
+                    for deal in discord_candidates:
+                        discount = 0
+                        if deal.historical_avg and deal.historical_avg > deal.buy_price:
+                            discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+                        result = await post_deal_to_discord(
+                            title=deal.title,
+                            deal_price=float(deal.buy_price),
+                            original_price=float(deal.historical_avg) if deal.historical_avg else None,
+                            discount_percent=discount,
+                            retailer=getattr(deal, "retailer", None) or "amazon",
+                            deal_url=deal.buy_url or "",
+                            image_url=deal.image_url,
+                            deal_tier=deal.deal_tier,
+                        )
+
+                        if result.get("status") == "success":
+                            discord_posted += 1
+                            logger.info(f"  Discord posted: {deal.title[:50]}")
+                        else:
+                            logger.warning(f"  Discord post failed: {result.get('error')}")
+
+                        await asyncio.sleep(2)
+
+                    if discord_posted:
+                        logger.info(f"Discord posting: {discord_posted}/{len(discord_candidates)} posted")
+                    else:
+                        logger.info("No deals posted to Discord this cycle")
+                else:
+                    logger.info("Discord webhook not configured, skipping")
+            except Exception as e:
+                logger.error(f"Discord posting failed: {e}", exc_info=True)
+
+            # ─── Send deal alerts to users via email + push ─────────────────
+            try:
+                from app.services.notification_service import distribute_deal, DealInfo
+
+                # Get the single best new deal for user notifications
+                best_deal = (
+                    db.query(ArbitrageDeal)
+                    .filter(
+                        ArbitrageDeal.status == "active",
+                        ArbitrageDeal.is_profitable == True,
+                        ArbitrageDeal.alerted_at == None,
+                    )
+                    .order_by(ArbitrageDeal.score.desc())
+                    .first()
+                )
+
+                if best_deal:
+                    deal_info = DealInfo.from_deal(best_deal)
+                    results = await distribute_deal(deal_info, db)
+                    posted_count = sum(1 for r in results if r.get("status") == "success")
+                    if posted_count:
+                        logger.info(f"Deal notifications sent: {posted_count} channels for '{best_deal.title[:40]}'")
+                        best_deal.alerted_at = datetime.utcnow()
+                        db.commit()
+                    else:
+                        logger.info("No deal notifications sent (no recipients or channels configured)")
+                else:
+                    logger.info("No new deals to notify users about")
+            except Exception as e:
+                logger.error(f"Deal notification failed: {e}", exc_info=True)
+
         finally:
             db.close()
 
