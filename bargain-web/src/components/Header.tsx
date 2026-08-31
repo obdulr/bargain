@@ -33,7 +33,9 @@ export default function Header() {
         >
           <svg width="28" height="28" viewBox="0 0 128 128" className="rounded-lg shrink-0" aria-label="BargainHuntrs">
             <rect width="128" height="128" rx="28" className="fill-zinc-900 dark:fill-emerald-500" />
-            <text x="64" y="64" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, -apple-system, sans-serif" fontSize="56" fontWeight="900" letterSpacing="-2" className="fill-white dark:fill-zinc-950">BH</text>
+            <text x="38" y="64" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, -apple-system, sans-serif" fontSize="48" fontWeight="900" className="fill-white dark:fill-zinc-950">B</text>
+            <path d="M64 28 L54 62 L62 62 L58 100 L74 58 L66 58 L70 28 Z" className="fill-emerald-500 dark:fill-zinc-950" />
+            <text x="92" y="64" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, -apple-system, sans-serif" fontSize="48" fontWeight="900" className="fill-white dark:fill-zinc-950">H</text>
           </svg>
           <span className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50 group-hover:opacity-80 transition-opacity">
             BargainHuntrs

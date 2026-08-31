@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
   <rect width="128" height="128" rx="28" class="logo-bg" fill="#09090b"/>
-  <text x="64" y="64" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="900" fill="#fafafa" letter-spacing="-2" class="logo-text">BH</text>
+  <text x="38" y="64" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="900" fill="#fafafa" class="logo-text">B</text>
+  <path d="M64 28 L54 62 L62 62 L58 100 L74 58 L66 58 L70 28 Z" fill="#10b981" class="logo-bolt"/>
+  <text x="92" y="64" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="900" fill="#fafafa" class="logo-text">H</text>
   <style>
     .logo-bg { fill: #09090b; }
     .logo-text { fill: #fafafa; }
+    .logo-bolt { fill: #10b981; }
     @media (prefers-color-scheme: dark) {
       .logo-bg { fill: #10b981; }
       .logo-text { fill: #09090b; }
+      .logo-bolt { fill: #09090b; }
     }
   </style>
 </svg>
