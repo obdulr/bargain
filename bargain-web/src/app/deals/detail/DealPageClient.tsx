@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PriceHistoryChart from "@/components/PriceHistoryChart";
 import { addUtmParameters, getPublicDeal, type ArbitrageDeal } from "@/lib/api";
 
 function retailerName(retailer?: string): string {
@@ -223,6 +224,8 @@ export default function DealPageClient() {
               </div>
             </div>
           </div>
+
+          <PriceHistoryChart deal={deal} />
         </div>
       </main>
 
