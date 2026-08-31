@@ -15,7 +15,7 @@ export default function Footer() {
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2 group w-fit">
               <Image
-                src="/icons/icon-192x192.png"
+                src="/logos/profile-icon-dark.png"
                 alt="BargainHuntrs"
                 width={28}
                 height={28}

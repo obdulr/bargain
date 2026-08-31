@@ -33,7 +33,7 @@ export default function Header() {
           onClick={() => setMenuOpen(false)}
         >
           <Image
-            src="/icons/icon-192x192.png"
+            src="/logos/profile-icon-dark.png"
             alt="BargainHuntrs"
             width={28}
             height={28}
