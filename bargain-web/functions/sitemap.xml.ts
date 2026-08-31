@@ -18,6 +18,7 @@ export async function onRequestGet() {
     { loc: `${BASE_URL}/seller`, lastmod: now, changefreq: "weekly", priority: "0.6" },
     { loc: `${BASE_URL}/pricing`, lastmod: now, changefreq: "monthly", priority: "0.5" },
     { loc: `${BASE_URL}/coupons`, lastmod: now, changefreq: "daily", priority: "0.6" },
+    { loc: `${BASE_URL}/tools/profit-calculator`, lastmod: now, changefreq: "monthly", priority: "0.7" },
   ];
 
   // Fetch active deals from the public API (paginate, max 200 per request)

@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: "/seller", label: "Seller" },
   { href: "/pricing", label: "Pricing" },
   { href: "/coupons", label: "Coupons" },
+  { href: "/tools/profit-calculator", label: "Tools" },
   { href: "/contact", label: "Waitlist" },
 ];
 
