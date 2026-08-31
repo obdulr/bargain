@@ -176,13 +176,13 @@ export default function LiveActivityFeed() {
     };
 
     // Initial show after a short delay
-    const initialTimer = setTimeout(showNext, 1500);
+    const initialTimer = setTimeout(showNext, 4000);
 
     return () => clearTimeout(initialTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, dismissed]);
 
-  // Auto-cycle every 4-5s with fade transition
+  // Auto-cycle every 20-30s with fade transition
   useEffect(() => {
     if (dismissed || queue.length === 0) return;
 
@@ -195,7 +195,7 @@ export default function LiveActivityFeed() {
         setCurrent(queue[idx]);
         setVisible(true);
       }, 400);
-    }, 4500);
+    }, 25000);
 
     return () => clearInterval(interval);
   }, [queue, dismissed]);
