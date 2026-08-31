@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -31,9 +32,14 @@ export default function Header() {
           className="flex items-center gap-2 group"
           onClick={() => setMenuOpen(false)}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-xs font-black text-white dark:bg-zinc-50 dark:text-zinc-900 select-none">
-            BH
-          </span>
+          <Image
+            src="/icons/icon-192x192.png"
+            alt="BargainHuntrs"
+            width={28}
+            height={28}
+            className="rounded-lg"
+            priority
+          />
           <span className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50 group-hover:opacity-80 transition-opacity">
             BargainHuntrs
           </span>
