@@ -11,6 +11,13 @@ from typing import Optional
 import httpx
 
 from app.core.config import settings
+from app.services.utm_service import add_utm_parameters
+
+# Default UTM parameters applied to every affiliate link so clicks can be
+# attributed back to BargainHuntrs regardless of which page generated them.
+DEFAULT_UTM_SOURCE = "bargainhuntrs"
+DEFAULT_UTM_MEDIUM = "referral"
+DEFAULT_UTM_CAMPAIGN = "deal_click"
 
 _AWIN_CACHE_TTL_SECONDS = 300
 _awin_programmes_cache: Optional[list[dict]] = None
@@ -232,6 +239,15 @@ def add_affiliate_tag(url: str, retailer: str = "", asin: str = "") -> str:
     # Fall back to Awin for any other joined merchant
     awin_url = add_awin_affiliate(url)
     if awin_url != url:
-        return awin_url
+        tagged = awin_url
+    else:
+        tagged = url
 
-    return url
+    # Ensure every outgoing affiliate link carries UTM tracking parameters.
+    # Existing utm_source/utm_medium are preserved; utm_campaign is always set.
+    return add_utm_parameters(
+        tagged,
+        DEFAULT_UTM_SOURCE,
+        DEFAULT_UTM_MEDIUM,
+        DEFAULT_UTM_CAMPAIGN,
+    )

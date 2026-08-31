@@ -52,6 +52,10 @@ class ScanScheduler:
         self._last_engagement_at: Optional[datetime] = None
         self._resale_reprice_task: Optional[asyncio.Task] = None
         self._last_resale_reprice_at: Optional[datetime] = None
+        self._newsletter_daily_task: Optional[asyncio.Task] = None
+        self._newsletter_weekly_task: Optional[asyncio.Task] = None
+        self._last_newsletter_daily_at: Optional[datetime] = None
+        self._last_newsletter_weekly_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:

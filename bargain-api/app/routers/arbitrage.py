@@ -6,19 +6,23 @@ Endpoints for scanning, viewing, and managing arbitrage opportunities.
 
 from decimal import Decimal
 import asyncio
+import hashlib
 import logging
 import os
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status, Header
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import func, cast, Date
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
 
 from app.db.session import get_db
-from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot
+from app.db.models import User, ArbitrageDeal, ScanRun, PriceSnapshot, AffiliateClick
 from app.core.config import settings
 from app.routers.auth import get_current_user
+from app.services.affiliate_service import add_affiliate_tag, detect_retailer
 
 
 def _verify_cron_secret(x_cron_secret: Optional[str] = Header(None)):
@@ -1482,3 +1486,196 @@ def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
         status=deal.status,
         detected_at=deal.detected_at.isoformat() if deal.detected_at else "",
     )
+
+
+# ─── Affiliate Click Tracking (redirect-based) ──────────────────────────────
+
+def _hash_ip(ip: str) -> str:
+    """SHA-256 hash an IP address for privacy-preserving analytics."""
+    if not ip:
+        return None
+    return hashlib.sha256(ip.encode("utf-8")).hexdigest()
+
+
+def _client_ip(request: Request) -> str:
+    """Extract the client IP, respecting X-Forwarded-For from Render's proxy."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+@router.post("/deals/{deal_id}/click")
+async def track_deal_click(
+    deal_id: UUID = Path(..., description="The deal to track and redirect to"),
+    db: Session = Depends(get_db),
+    request: Request = None,
+):
+    """Track a click on a deal and redirect to the affiliate URL.
+
+    No authentication required -- works for anonymous visitors. Records the
+    deal_id, retailer, timestamp, user_agent, referrer, and a hashed IP for
+    analytics, then issues a 302 redirect to the affiliate-tagged URL.
+    """
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deal not found")
+
+    buy_url = deal.buy_url or ""
+    if not buy_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This deal does not have a purchase link.",
+        )
+
+    retailer = deal.retailer or detect_retailer(buy_url) or "amazon"
+    affiliate_url = add_affiliate_tag(buy_url, retailer, deal.asin or "")
+
+    # Record the click (best-effort -- never block the redirect on a DB error)
+    try:
+        click = AffiliateClick(
+            deal_id=deal.id,
+            user_id=None,
+            retailer=retailer,
+            original_url=buy_url,
+            affiliate_url=affiliate_url,
+            asin=deal.asin or None,
+            clicked_at=datetime.utcnow(),
+            user_agent=request.headers.get("user-agent") if request else None,
+            referrer=request.headers.get("referer") if request else None,
+            ip_hash=_hash_ip(_client_ip(request)) if request else None,
+        )
+        db.add(click)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log deal click redirect: {e}")
+        db.rollback()
+
+    return RedirectResponse(url=affiliate_url, status_code=status.HTTP_302_FOUND)
+
+
+# ─── Affiliate Stats (admin only) ───────────────────────────────────────────
+
+def _require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Dependency that ensures the authenticated user has an admin role."""
+    if (current_user.role or "").lower() != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user
+
+
+# Rough commission-rate estimates by retailer (percentage of order value).
+# Used for the "estimated commission earned" figure in admin stats.
+_ESTIMATED_COMMISSION_RATES = {
+    "amazon": 0.04,
+    "ebay": 0.03,
+    "walmart": 0.04,
+    "target": 0.04,
+    "bestbuy": 0.03,
+    "best_buy": 0.03,
+    "home_depot": 0.03,
+    "homedepot": 0.03,
+    "lowes": 0.03,
+    "costco": 0.02,
+    "newegg": 0.03,
+}
+
+
+@router.get("/affiliate/stats")
+async def affiliate_stats(
+    current_user: User = Depends(_require_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=1, le=365, description="Lookback window in days"),
+):
+    """Admin-only aggregate affiliate click statistics.
+
+    Returns click counts broken down by retailer, by day, and by deal, plus
+    an estimated commission figure based on average deal buy prices and
+    approximate retailer commission rates.
+    """
+    since = datetime.utcnow() - timedelta(days=days)
+
+    try:
+        base = db.query(AffiliateClick).filter(AffiliateClick.clicked_at >= since)
+
+        total_clicks = base.count()
+
+        # Clicks by retailer
+        by_retailer_rows = (
+            db.query(AffiliateClick.retailer, func.count(AffiliateClick.id))
+            .filter(AffiliateClick.clicked_at >= since)
+            .group_by(AffiliateClick.retailer)
+            .all()
+        )
+        clicks_by_retailer = [
+            {"retailer": r or "unknown", "clicks": c}
+            for r, c in by_retailer_rows
+        ]
+
+        # Clicks by day
+        by_day_rows = (
+            db.query(
+                cast(AffiliateClick.clicked_at, Date).label("day"),
+                func.count(AffiliateClick.id),
+            )
+            .filter(AffiliateClick.clicked_at >= since)
+            .group_by("day")
+            .order_by("day")
+            .all()
+        )
+        clicks_by_day = [
+            {"date": d.isoformat(), "clicks": c}
+            for d, c in by_day_rows
+        ]
+
+        # Clicks by deal (top 50)
+        by_deal_rows = (
+            db.query(
+                AffiliateClick.deal_id,
+                func.count(AffiliateClick.id),
+            )
+            .filter(AffiliateClick.clicked_at >= since)
+            .group_by(AffiliateClick.deal_id)
+            .order_by(func.count(AffiliateClick.id).desc())
+            .limit(50)
+            .all()
+        )
+        deal_ids = [row[0] for row in by_deal_rows if row[0]]
+        deals_map = {}
+        if deal_ids:
+            deals = db.query(ArbitrageDeal).filter(ArbitrageDeal.id.in_(deal_ids)).all()
+            deals_map = {d.id: d for d in deals}
+
+        clicks_by_deal = []
+        estimated_commission = 0.0
+        for deal_id, count in by_deal_rows:
+            deal = deals_map.get(deal_id)
+            title = deal.title if deal else None
+            retailer = deal.retailer if deal else None
+            buy_price = float(deal.buy_price) if deal and deal.buy_price else 0.0
+            rate = _ESTIMATED_COMMISSION_RATES.get((retailer or "").lower(), 0.03)
+            estimated_commission += buy_price * rate * count
+            clicks_by_deal.append({
+                "deal_id": str(deal_id) if deal_id else None,
+                "title": title,
+                "retailer": retailer,
+                "clicks": count,
+                "estimated_commission": round(buy_price * rate * count, 2),
+            })
+
+        return {
+            "days": days,
+            "total_clicks": total_clicks,
+            "clicks_by_retailer": clicks_by_retailer,
+            "clicks_by_day": clicks_by_day,
+            "clicks_by_deal": clicks_by_deal,
+            "estimated_commission_earned": round(estimated_commission, 2),
+        }
+    except Exception as e:
+        logger.warning(f"Failed to query affiliate admin stats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load affiliate stats",
+        )

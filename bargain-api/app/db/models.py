@@ -290,6 +290,10 @@ class AffiliateClick(Base):
     clicked_at = Column(DateTime, default=datetime.utcnow, index=True)
     converted = Column(Boolean, default=False)  # Updated later via affiliate API
     commission_earned = Column(Float, default=0.0)
+    # Enriched click metadata (added in 024_add_affiliate_click_columns)
+    user_agent = Column(Text, nullable=True)
+    referrer = Column(Text, nullable=True)
+    ip_hash = Column(String(64), nullable=True)  # SHA-256 of IP for privacy
 
 
 class UserSubmittedDeal(Base):
@@ -398,3 +402,16 @@ class ReferralClaim(Base):
 
     referrer = relationship("User", foreign_keys=[referrer_id], back_populates="referral_claims")
     referee = relationship("User", foreign_keys=[referee_id])
+
+
+class NewsletterSubscriber(Base):
+    """Email newsletter subscriber for the daily/weekly deal digest."""
+    __tablename__ = "newsletter_subscribers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=True)
+    subscribed_at = Column(DateTime, default=datetime.utcnow)
+    unsubscribed_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    source = Column(String(255), nullable=True)
