@@ -1,0 +1,7 @@
+name = "keep-alive"
+main = "keep-alive.js"
+compatibility_date = "2026-08-30"
+
+[triggers]
+# Run every 10 minutes
+crons = ["*/10 * * * *"]
