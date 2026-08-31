@@ -14,11 +14,14 @@ export async function onRequestGet() {
     { loc: `${BASE_URL}/deals/best`, lastmod: now, changefreq: "daily", priority: "0.8" },
     { loc: `${BASE_URL}/deals/amazon`, lastmod: now, changefreq: "daily", priority: "0.8" },
     { loc: `${BASE_URL}/deals/retailers`, lastmod: now, changefreq: "weekly", priority: "0.6" },
+    { loc: `${BASE_URL}/retailers`, lastmod: now, changefreq: "weekly", priority: "0.8" },
+    { loc: `${BASE_URL}/deals/calendar`, lastmod: now, changefreq: "monthly", priority: "0.7" },
     { loc: `${BASE_URL}/community`, lastmod: now, changefreq: "daily", priority: "0.7" },
     { loc: `${BASE_URL}/seller`, lastmod: now, changefreq: "weekly", priority: "0.6" },
     { loc: `${BASE_URL}/pricing`, lastmod: now, changefreq: "monthly", priority: "0.5" },
     { loc: `${BASE_URL}/coupons`, lastmod: now, changefreq: "daily", priority: "0.6" },
     { loc: `${BASE_URL}/tools/profit-calculator`, lastmod: now, changefreq: "monthly", priority: "0.7" },
+    { loc: `${BASE_URL}/tools/listing-generator`, lastmod: now, changefreq: "monthly", priority: "0.7" },
   ];
 
   // Fetch active deals from the public API (paginate, max 200 per request)

@@ -6,11 +6,14 @@ import { useAuth } from "@/context/AuthContext";
 
 const NAV_LINKS = [
   { href: "/deals", label: "Deals" },
+  { href: "/retailers", label: "Retailers" },
+  { href: "/deals/calendar", label: "Calendar" },
   { href: "/community", label: "Community" },
   { href: "/seller", label: "Seller" },
   { href: "/pricing", label: "Pricing" },
   { href: "/coupons", label: "Coupons" },
-  { href: "/tools/profit-calculator", label: "Tools" },
+  { href: "/tools/profit-calculator", label: "Profit Calc" },
+  { href: "/tools/listing-generator", label: "Listing Gen" },
   { href: "/contact", label: "Waitlist" },
 ];
 
