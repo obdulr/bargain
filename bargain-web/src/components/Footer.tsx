@@ -13,9 +13,10 @@ export default function Footer() {
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2 group w-fit">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 text-xs font-black text-white dark:bg-zinc-50 dark:text-zinc-900 select-none">
-                BH
-              </span>
+              <svg width="28" height="28" viewBox="0 0 128 128" className="rounded-lg shrink-0" aria-label="BargainHuntrs">
+                <rect width="128" height="128" rx="28" className="fill-zinc-900 dark:fill-emerald-500" />
+                <text x="64" y="64" textAnchor="middle" dominantBaseline="central" fontFamily="system-ui, -apple-system, sans-serif" fontSize="56" fontWeight="900" letterSpacing="-2" className="fill-white dark:fill-zinc-950">BH</text>
+              </svg>
               <span className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50 group-hover:opacity-80 transition-opacity">
                 BargainHuntrs
               </span>
