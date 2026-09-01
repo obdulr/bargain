@@ -524,3 +524,68 @@ async def my_aura(
         "deals_approved": approved_deals,
         "total_upvotes_received": int(total_upvotes),
     }
+
+
+@router.post("/seed", status_code=status.HTTP_200_OK)
+async def seed_community_deals(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Seed community deals from the best arbitrage deals.
+
+    Admin-only endpoint that takes the top active arbitrage deals and
+    creates pre-approved community submissions so the community page
+    isn't empty. Uses the system/bot user if one exists, otherwise
+    uses the current admin user.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Get top active arbitrage deals with images
+    deals = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.status == "active",
+        ArbitrageDeal.is_profitable == True,
+        ArbitrageDeal.image_url.isnot(None),
+    ).order_by(
+        ArbitrageDeal.score.desc(),
+        ArbitrageDeal.detected_at.desc(),
+    ).limit(15).all()
+
+    # Check for existing seeded deals to avoid duplicates
+    existing_urls = set(
+        r[0] for r in db.query(UserSubmittedDeal.url).all()
+    )
+
+    seeded = 0
+    for deal in deals:
+        if not deal.buy_url or deal.buy_url in existing_urls:
+            continue
+
+        discount = 0
+        if deal.historical_avg and deal.historical_avg > deal.buy_price:
+            discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
+
+        community_deal = UserSubmittedDeal(
+            user_id=current_user.id,
+            title=deal.title[:500] if deal.title else "Untitled Deal",
+            url=deal.buy_url,
+            image_url=deal.image_url,
+            retailer=deal.retailer or deal.buy_platform or "unknown",
+            original_price=deal.historical_avg,
+            sale_price=deal.buy_price,
+            discount_percent=discount,
+            category=getattr(deal, "deal_tier", None) or "clearance",
+            description=f"Auto-seeded from arbitrage scan. {discount}% off at {deal.retailer or 'retailer'}.",
+            status="approved",
+            reviewed_by=current_user.id,
+            reviewed_at=datetime.utcnow(),
+            upvotes=0,
+            downvotes=0,
+            score=0,
+        )
+        db.add(community_deal)
+        existing_urls.add(deal.buy_url)
+        seeded += 1
+
+    db.commit()
+    return {"status": "success", "seeded": seeded, "message": f"Seeded {seeded} community deals"}

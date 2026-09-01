@@ -91,9 +91,40 @@ async def refresh_access_token() -> Optional[str]:
         return None
 
 
-def _build_pin_title(title: str) -> str:
-    """Build a pin title (max 100 chars)."""
-    return title[:MAX_TITLE_LENGTH]
+def _build_pin_title(title: str, retailer: str = "", discount_percent: int = 0) -> str:
+    """Build an SEO-optimized pin title for Pinterest search.
+
+    Pinterest is a search engine. Titles should include keywords people
+    search for: "deal", "sale", "clearance", retailer name, discount %.
+    Max 100 chars.
+    """
+    retailer_name = retailer.replace("_", " ").title() if retailer else ""
+
+    # Build a search-friendly title
+    # Format: "Product Name - X% Off [Retailer] Deal/Sale/Clearance"
+    base = title.strip()[:60]  # Keep product name short
+
+    parts = [base]
+    if discount_percent and discount_percent >= 50:
+        parts.append(f"{discount_percent}% Off")
+    elif discount_percent and discount_percent >= 25:
+        parts.append(f"{discount_percent}% Off")
+
+    if retailer_name:
+        parts.append(retailer_name)
+
+    # Choose the best keyword based on discount level
+    if discount_percent >= 75:
+        parts.append("Deal")
+    elif discount_percent >= 50:
+        parts.append("Sale")
+    elif discount_percent >= 25:
+        parts.append("Clearance")
+    else:
+        parts.append("Deal")
+
+    pin_title = " - ".join(parts)
+    return pin_title[:MAX_TITLE_LENGTH]
 
 
 def _build_pin_description(
@@ -101,9 +132,14 @@ def _build_pin_description(
     original_price: Optional[float],
     discount_percent: int,
     retailer: str,
+    title: str = "",
 ) -> str:
-    """Build a pin description (max 500 chars)."""
-    retailer_name = retailer.replace("_", " ").title()
+    """Build an SEO-optimized pin description (max 500 chars).
+
+    Includes price, savings, retailer, and search keywords that help
+    the pin get discovered on Pinterest.
+    """
+    retailer_name = retailer.replace("_", " ").title() if retailer else ""
 
     if original_price and original_price > deal_price:
         savings = original_price - deal_price
@@ -111,7 +147,27 @@ def _build_pin_description(
     else:
         price_line = f"${deal_price:.0f} at {retailer_name}"
 
-    description = f"{price_line}\n\nFind more deals at BargainHuntrs.com"
+    # SEO keywords that people search for on Pinterest
+    keywords = []
+    if discount_percent and discount_percent >= 75:
+        keywords.append("price glitch")
+        keywords.append("insane deal")
+    elif discount_percent and discount_percent >= 50:
+        keywords.append("mega sale")
+        keywords.append("huge discount")
+    elif discount_percent and discount_percent >= 25:
+        keywords.append("clearance deal")
+        keywords.append("hot deal")
+    else:
+        keywords.append("bargain")
+        keywords.append("discount")
+
+    if retailer_name:
+        keywords.append(f"{retailer_name.lower()} deals")
+
+    keyword_line = " | ".join(keywords[:4])
+
+    description = f"{price_line}\n\n{keyword_line}\n\nFind more deals at BargainHuntrs.com — we scan 500+ retailers for price glitches, clearance, and discounts in real time."
     return description[:MAX_DESCRIPTION_LENGTH]
 
 
@@ -149,12 +205,13 @@ async def post_deal_to_pinterest(
         return {"status": "error", "error": "Image URL must be a real image (not SVG/placeholder)"}
 
     try:
-        pin_title = _build_pin_title(title)
+        pin_title = _build_pin_title(title, retailer, discount_percent)
         pin_description = _build_pin_description(
             deal_price=deal_price,
             original_price=original_price,
             discount_percent=discount_percent,
             retailer=retailer,
+            title=title,
         )
         pin_link = _build_pin_link(deal_url) if deal_url else None
 
