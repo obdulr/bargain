@@ -26,6 +26,7 @@ Env vars:
   SKIMLINKS_CLIENT_SECRET   — Skimlinks client secret
 """
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -600,7 +601,7 @@ def save_affiliate_deals_to_database(deals: list[AffiliateDeal], db_session) -> 
     for deal in deals:
         try:
             # Generate a unique ASIN-like ID from the network + retailer + URL hash
-            deal_id = f"{deal.network}_{deal.retailer}_{abs(hash(deal.deal_url))}"[:36]
+            deal_id = f"{deal.network}_{deal.retailer}_{hashlib.md5(deal.deal_url.encode()).hexdigest()[:12]}"[:36]
 
             existing = (
                 db_session.query(ArbitrageDeal)

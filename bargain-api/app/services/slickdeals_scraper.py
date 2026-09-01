@@ -18,6 +18,7 @@ We parse the title/description to extract:
 - Product URL (if directly linked)
 """
 import asyncio
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -322,7 +323,7 @@ def save_slickdeals_to_database(deals: list[Slickdeal], db_session) -> int:
 
             # Extract ASIN for Amazon deals
             asin = _extract_amazon_asin(f"{deal.description} {deal.product_url}")
-            deal_id = asin or str(abs(hash(deal.deal_url)))[:20]
+            deal_id = asin or hashlib.md5(deal.deal_url.encode()).hexdigest()[:20]
 
             # Check if deal already exists
             existing = (

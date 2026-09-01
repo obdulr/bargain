@@ -275,20 +275,17 @@ HASHTAG_SETS = {
 
 # Prefix variety by discount level — randomly picked for variety
 PREFIX_SETS = {
-    "75+": ["⚡ PRICE ERROR", "🚨 INSANE DEAL", "🔥 GLITCH ALERT", "💥 STEAL DEAL"],
-    "50-74": ["🔥 MEGA DEAL", "🔥 HUGE SAVINGS", "⚡ BIG DISCOUNT", "💯 MAJOR DEAL"],
-    "25-49": ["🔥 HOT DEAL", "💰 GREAT PRICE", "✨ NICE FIND", "🎯 GOOD DEAL"],
-    "<25": ["💡 QUICK DEAL", "📌 SAVING", "✅ DEAL", "🏷️ MARKDOWN"],
+    "75+": ["⚡ Price error", "🚨 Insane deal", "🔥 Glitch alert"],
+    "50-74": ["🔥 Mega deal", "� Huge savings", "⚡ Big discount"],
+    "25-49": ["🔥 Hot deal", "💰 Great price", "✨ Nice find"],
+    "<25": ["💡 Quick deal", "📌 Saving", "✅ Deal"],
 }
 
-# Call-to-action lines — added 50% of the time for variety
+# Call-to-action lines — added 30% of the time for variety
 CTA_LINES = [
-    "Run, don't walk! 🏃",
-    "Limited time only ⏰",
-    "Stock won't last! 📦",
-    "Grab it before it's gone! ⚡",
-    "This will sell out fast! 🔥",
-    "Don't sleep on this! 😴❌",
+    "Limited time",
+    "While supplies last",
+    "Won't last long",
 ]
 
 
@@ -353,8 +350,8 @@ def _format_deal_tweet(
     else:
         price_line = f"${deal_price:.0f} at {retailer_name}"
 
-    # Random CTA ~50% of the time
-    cta = f" — {random.choice(CTA_LINES)}" if random.random() < 0.5 else ""
+    # Random CTA ~30% of the time
+    cta = f" — {random.choice(CTA_LINES)}" if random.random() < 0.3 else ""
 
     # Tag outgoing deal link with UTM parameters for X/Twitter tracking
     campaign = f"deal_alert_{datetime.utcnow().strftime('%Y-%m-%d')}"
@@ -583,18 +580,27 @@ async def post_deal_to_x(
     deal_url: str,
     deal_tier: str = "clearance",
     image_url: Optional[str] = None,
+    deal_id: Optional[str] = None,
 ) -> dict:
     """Format a deal as a post and send it to all social platforms via Buffer.
 
     Posts to X (@bargain4huntrs), Instagram (@bargainhuntrs), and
     Facebook (Bargain Huntrs) simultaneously.
+    Uses a short redirect link when deal_id is provided to keep posts clean.
     """
-    # Ensure deal URL has affiliate tag
-    try:
-        from app.services.affiliate_service import add_affiliate_tag
-        deal_url = add_affiliate_tag(deal_url, retailer)
-    except Exception:
-        pass
+    # Use short link if we have a deal_id, otherwise use full affiliate URL
+    if deal_id:
+        short_url = f"https://api.bargainhuntrs.com/api/v1/arbitrage/d/{deal_id}"
+        # Add UTM params to the short link
+        campaign = f"deal_alert_{datetime.utcnow().strftime('%Y-%m-%d')}"
+        deal_url = add_utm_parameters(short_url, "twitter", "social", campaign)
+    else:
+        # Ensure deal URL has affiliate tag
+        try:
+            from app.services.affiliate_service import add_affiliate_tag
+            deal_url = add_affiliate_tag(deal_url, retailer)
+        except Exception:
+            pass
 
     tweet_text = _format_deal_tweet(
         title=title,

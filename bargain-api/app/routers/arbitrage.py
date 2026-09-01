@@ -419,7 +419,7 @@ async def scrape_all_deals_public(
                     if not deal.get("deal_price") or not deal.get("title"):
                         continue
 
-                    deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
+                    deal_id = f"impact_{deal.get('campaign_id', '')}_{hashlib.md5(deal.get('title', '').encode()).hexdigest()[:12]}"[:36]
 
                     orig = deal.get("original_price") or 0
                     buy = deal.get("deal_price") or 0
@@ -1486,6 +1486,58 @@ def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
         status=deal.status,
         detected_at=deal.detected_at.isoformat() if deal.detected_at else "",
     )
+
+
+# ─── Short Link Redirect (GET, for social media posts) ─────────────────────
+
+@router.get("/d/{deal_id}")
+async def short_link_redirect(
+    deal_id: UUID = Path(..., description="Deal ID for short link redirect"),
+    db: Session = Depends(get_db),
+    request: Request = None,
+):
+    """GET-based redirect for use in social media posts.
+
+    Creates a short URL like:
+      https://api.bargainhuntrs.com/api/v1/arbitrage/d/{deal_id}
+
+    Tracks the click and 302-redirects to the affiliate URL.
+    """
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deal not found")
+
+    buy_url = deal.buy_url or ""
+    if not buy_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This deal does not have a purchase link.",
+        )
+
+    retailer = deal.retailer or detect_retailer(buy_url) or "amazon"
+    affiliate_url = add_affiliate_tag(buy_url, retailer, deal.asin or "")
+
+    # Record the click (best-effort)
+    try:
+        click = AffiliateClick(
+            deal_id=deal.id,
+            user_id=None,
+            retailer=retailer,
+            original_url=buy_url,
+            affiliate_url=affiliate_url,
+            asin=deal.asin or None,
+            clicked_at=datetime.utcnow(),
+            user_agent=request.headers.get("user-agent") if request else None,
+            referrer=request.headers.get("referer") if request else None,
+            ip_hash=_hash_ip(_client_ip(request)) if request else None,
+        )
+        db.add(click)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log short link click: {e}")
+        db.rollback()
+
+    return RedirectResponse(url=affiliate_url, status_code=status.HTTP_302_FOUND)
 
 
 # ─── Affiliate Click Tracking (redirect-based) ──────────────────────────────

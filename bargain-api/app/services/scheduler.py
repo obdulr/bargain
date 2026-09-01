@@ -12,6 +12,7 @@ Flow:
 """
 
 import asyncio
+import hashlib
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from decimal import Decimal
@@ -366,7 +367,7 @@ class ScanScheduler:
                         try:
                             if not deal.get("deal_price") or not deal.get("title"):
                                 continue
-                            deal_id = f"impact_{deal.get('campaign_id', '')}_{abs(hash(deal.get('title', '')))}"[:36]
+                            deal_id = f"impact_{deal.get('campaign_id', '')}_{hashlib.md5(deal.get('title', '').encode()).hexdigest()[:12]}"[:36]
                             orig = deal.get("original_price") or 0
                             buy = deal.get("deal_price") or 0
                             if not buy or buy <= 0:
@@ -503,6 +504,27 @@ class ScanScheduler:
                     diverse_deals.append(d)
                 candidate_deals = diverse_deals
 
+                # Title-based dedup: skip deals with the same title as recently posted deals
+                recent_cutoff = datetime.utcnow() - timedelta(hours=48)
+                recently_posted_titles = set()
+                try:
+                    recent_posts = db.query(ArbitrageDeal).filter(
+                        ArbitrageDeal.alerted_at != None,
+                        ArbitrageDeal.alerted_at > recent_cutoff,
+                    ).all()
+                    recently_posted_titles = {d.title.lower().strip() for d in recent_posts}
+                except Exception:
+                    pass
+                if recently_posted_titles:
+                    before = len(candidate_deals)
+                    candidate_deals = [
+                        d for d in candidate_deals
+                        if d.title.lower().strip() not in recently_posted_titles
+                    ]
+                    skipped = before - len(candidate_deals)
+                    if skipped:
+                        logger.info(f"Skipped {skipped} recently-posted deals (title dedup)")
+
                 # Only post deals that have affiliate links
                 affiliate_domains = ["sjv.io", "7eer.net", "pxf.io", "evyy.net",
                     "vneoga.net", "elfm.net", "eyjo.net", "gqco.net", "hmxg.net",
@@ -538,6 +560,7 @@ class ScanScheduler:
                             deal_url=deal.buy_url or "",
                             deal_tier=deal.deal_tier,
                             image_url=deal.image_url,
+                            deal_id=str(deal.id),
                         )
 
                         if result.get("status") == "success":
