@@ -159,38 +159,52 @@ async def _scrape_feed(feed: dict) -> list[PublicCoupon]:
 
                 # Try to find retailer from the feed
                 retailer_name = ""
-                # First try explicit merchant/creator/author tags
-                merchant = item.find("merchant") or item.find("dc:creator") or item.find("author")
-                if merchant and merchant.text.strip():
-                    # Make sure it's not an email or feed name
-                    mtext = merchant.text.strip()
-                    if "@" not in mtext and "rss" not in mtext.lower() and "techbargains" not in mtext.lower() and "slickdeals" not in mtext.lower():
-                        retailer_name = mtext
 
-                # Try WordPress-style categories (Hip2Save, 9to5toys)
+                # Known retailers list used across multiple detection methods
+                known_retailers = [
+                    "Amazon", "Walmart", "Target", "Best Buy", "eBay",
+                    "Newegg", "Costco", "Home Depot", "Lowe's", "Kohl's",
+                    "Macy's", "Overstock", "Adorama", "Woot", "Wayfair",
+                    "Dell", "Samsung", "Apple", "Sony", "LG",
+                    "Microsoft", "HP", "Lenovo", "Asus", "Acer",
+                    "Monoprice", "B&H", "Staples", "Office Depot",
+                ]
+
+                # Try WordPress-style categories first (Hip2Save, 9to5toys)
+                # These are more reliable than Slickdeals' merchant field
+                categories = item.find_all("category")
+                for cat in categories:
+                    cat_text = cat.text.strip()
+                    for known in known_retailers:
+                        if known.lower() in cat_text.lower():
+                            retailer_name = known
+                            break
+                    if retailer_name:
+                        break
+
+                # Try to extract from title
                 if not retailer_name:
-                    categories = item.find_all("category")
-                    for cat in categories:
-                        cat_text = cat.text.strip()
-                        for known in ["Amazon", "Walmart", "Target", "Best Buy", "eBay",
-                                      "Newegg", "Costco", "Home Depot", "Lowe's", "Kohl's",
-                                      "Macy's", "Overstock", "Adorama", "Woot", "Wayfair",
-                                      "Dell", "Samsung", "Apple", "Sony", "LG",
-                                      "Microsoft", "HP", "Lenovo", "Asus", "Acer"]:
-                            if known.lower() in cat_text.lower():
-                                retailer_name = known
-                                break
-                        if retailer_name:
+                    for known in known_retailers:
+                        if known.lower() in title_text.lower():
+                            retailer_name = known
                             break
 
-                if not retailer_name:
-                    # Try to extract from title
-                    for known in ["Amazon", "Walmart", "Target", "Best Buy", "eBay",
-                                  "Newegg", "Costco", "Home Depot", "Lowe's", "Kohl's",
-                                  "Macy's", "Overstock", "Adorama", "Woot", "Wayfair",
-                                  "Dell", "LEGO", "Samsung", "Apple", "Sony", "LG",
-                                  "Microsoft", "HP", "Lenovo", "Asus", "Acer"]:
-                        if known.lower() in title_text.lower():
+                # Try to extract from description (Slickdeals format: "Amazon [amazon.com] has...")
+                if not retailer_name and desc_text:
+                    desc_lower = desc_text.lower()
+                    for known in known_retailers:
+                        if known.lower() in desc_lower:
+                            retailer_name = known
+                            break
+
+                # Try domain from link
+                if not retailer_name and link_text:
+                    domain = urlparse(link_text).netloc.lower()
+                    for known in ["amazon", "walmart", "target", "bestbuy",
+                                  "ebay", "newegg", "costco", "homedepot",
+                                  "lowes", "kohls", "macys", "overstock",
+                                  "wayfair", "dell", "samsung", "apple"]:
+                        if known in domain:
                             retailer_name = known
                             break
 

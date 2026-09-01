@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "023"
-down_revision = "022"
+down_revision = "022_add_resale_listings"
 branch_labels = None
 depends_on = None
 

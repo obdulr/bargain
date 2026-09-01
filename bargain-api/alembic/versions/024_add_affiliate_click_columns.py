@@ -13,7 +13,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "024_add_affiliate_click_columns"
-down_revision = "023_add_fcm_token"
+down_revision = "023"
 branch_labels = None
 depends_on = None
 
