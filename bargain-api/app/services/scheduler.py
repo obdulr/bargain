@@ -57,6 +57,8 @@ class ScanScheduler:
         self._newsletter_weekly_task: Optional[asyncio.Task] = None
         self._last_newsletter_daily_at: Optional[datetime] = None
         self._last_newsletter_weekly_at: Optional[datetime] = None
+        self._coupon_scrape_task: Optional[asyncio.Task] = None
+        self._last_coupon_scrape_at: Optional[datetime] = None
 
     @property
     def is_running(self) -> bool:
@@ -86,6 +88,7 @@ class ScanScheduler:
             "last_deal_scrape_at": self._last_deal_scrape_at.isoformat() if self._last_deal_scrape_at else None,
             "last_engagement_at": self._last_engagement_at.isoformat() if self._last_engagement_at else None,
             "last_resale_reprice_at": self._last_resale_reprice_at.isoformat() if self._last_resale_reprice_at else None,
+            "last_coupon_scrape_at": self._last_coupon_scrape_at.isoformat() if self._last_coupon_scrape_at else None,
         }
 
     def _get_post_times(self) -> list[time]:
@@ -144,6 +147,9 @@ class ScanScheduler:
         # Start the newsletter digest loops (daily + weekly)
         self._newsletter_daily_task = asyncio.create_task(self._run_newsletter_daily_loop())
         self._newsletter_weekly_task = asyncio.create_task(self._run_newsletter_weekly_loop())
+        # Start the coupon scrape loop (every 6 hours by default)
+        if getattr(settings, "COUPON_AUTO_SCRAPE", False):
+            self._coupon_scrape_task = asyncio.create_task(self._run_coupon_scrape_loop())
         # Start the X engagement automation loop (every 30 minutes) if enabled
         if getattr(settings, "ENGAGEMENT_ENABLED", False):
             self._engagement_task = asyncio.create_task(self._run_engagement_loop())
@@ -173,6 +179,8 @@ class ScanScheduler:
             self._engagement_task.cancel()
         if self._resale_reprice_task and not self._resale_reprice_task.done():
             self._resale_reprice_task.cancel()
+        if self._coupon_scrape_task and not self._coupon_scrape_task.done():
+            self._coupon_scrape_task.cancel()
         self._next_scan_at = None
         logger.info("Scan scheduler stopped")
         return True
@@ -784,6 +792,106 @@ class ScanScheduler:
             except Exception as e:
                 logger.error(f"Deal notification failed: {e}", exc_info=True)
 
+        finally:
+            db.close()
+
+    async def _run_coupon_scrape_loop(self):
+        """Background loop that scrapes coupons from Impact + public RSS feeds
+        and marks expired coupons every COUPON_SCRAPE_INTERVAL_HOURS (default 6h).
+        """
+        interval_hours = getattr(settings, "COUPON_SCRAPE_INTERVAL_HOURS", 6)
+        logger.info(f"Coupon scrape loop started (every {interval_hours}h)")
+
+        # Run an initial scrape shortly after startup (30s delay to not compete
+        # with the initial arbitrage scan)
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            return
+
+        while self._running:
+            try:
+                await self._scrape_and_store_coupons()
+                self._last_coupon_scrape_at = datetime.utcnow()
+            except Exception as e:
+                logger.error(f"Coupon scrape loop error: {e}", exc_info=True)
+
+            try:
+                await asyncio.sleep(interval_hours * 3600)
+            except asyncio.CancelledError:
+                logger.info("Coupon scrape loop cancelled")
+                break
+
+    async def _scrape_and_store_coupons(self):
+        """Scrape coupons from all sources and upsert into the database.
+        Also marks expired coupons as expired.
+        """
+        from app.services.coupon_scraper import scrape_all_coupons, ScrapedCoupon
+        from app.db.models import CouponCode
+
+        logger.info("Starting coupon scrape cycle...")
+        db = SessionLocal()
+        try:
+            scraped_coupons = await scrape_all_coupons()
+            saved = 0
+            errors = 0
+
+            for sc in scraped_coupons:
+                try:
+                    existing = db.query(CouponCode).filter(
+                        CouponCode.code == sc.code,
+                        CouponCode.retailer == sc.retailer,
+                    ).first()
+
+                    if existing:
+                        existing.title = sc.title
+                        existing.description = sc.description
+                        existing.discount_type = sc.discount_type
+                        existing.discount_value = sc.discount_value
+                        existing.min_purchase = sc.min_purchase
+                        existing.max_discount = sc.max_discount
+                        existing.category = sc.category
+                        existing.product_url = sc.product_url
+                        existing.source = sc.source
+                        existing.source_url = sc.source_url
+                        existing.expires_at = sc.expires_at
+                        existing.scraped_at = datetime.utcnow()
+                        existing.status = "active"
+                    else:
+                        coupon = CouponCode(
+                            code=sc.code,
+                            retailer=sc.retailer,
+                            title=sc.title,
+                            description=sc.description,
+                            discount_type=sc.discount_type,
+                            discount_value=sc.discount_value,
+                            min_purchase=sc.min_purchase,
+                            max_discount=sc.max_discount,
+                            category=sc.category,
+                            product_url=sc.product_url,
+                            source=sc.source,
+                            source_url=sc.source_url,
+                            expires_at=sc.expires_at,
+                            status="active",
+                            scraped_at=datetime.utcnow(),
+                        )
+                        db.add(coupon)
+                    saved += 1
+                except Exception:
+                    errors += 1
+
+            db.commit()
+
+            # Mark expired coupons
+            expired_count = db.query(CouponCode).filter(
+                CouponCode.expires_at < datetime.utcnow(),
+                CouponCode.status == "active",
+            ).update({CouponCode.status: "expired"}, synchronize_session=False)
+            if expired_count:
+                db.commit()
+                logger.info(f"Marked {expired_count} coupons as expired")
+
+            logger.info(f"Coupon scrape complete: {len(scraped_coupons)} fetched, {saved} saved, {errors} errors")
         finally:
             db.close()
 

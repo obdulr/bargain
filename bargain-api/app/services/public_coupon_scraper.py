@@ -2,10 +2,13 @@
 Public Coupon Scraper — fetches promo codes from free RSS/JSON feeds.
 
 Sources:
-  - Slickdeals coupons RSS
-  - RetailMeNot public coupon pages (RSS when available)
-  - DealNews coupon feed
-  - TechBargains coupons
+  - Slickdeals coupons RSS (verified working)
+  - Hip2Save deals RSS (often includes promo codes in posts)
+  - 9to5toys deals RSS (tech deals with occasional promo codes)
+
+Note: DealNews and TechBargains RSS feeds are no longer available
+(404 and 403 respectively as of 2026-09). They have been replaced
+with Hip2Save and 9to5toys which are actively maintained.
 
 No API key required — these are public feeds.
 """
@@ -40,6 +43,7 @@ class PublicCoupon:
 
 
 # RSS feeds with coupon/promo code data
+# Only feeds that are verified working as of 2026-09 are included.
 COUPON_FEEDS = [
     {
         "name": "Slickdeals Coupons",
@@ -47,13 +51,13 @@ COUPON_FEEDS = [
         "retailer_field": "merchant",
     },
     {
-        "name": "DealNews Coupons",
-        "url": "https://dealnews.com/coupons/rss.xml",
+        "name": "Hip2Save",
+        "url": "https://hip2save.com/feed/",
         "retailer_field": "merchant",
     },
     {
-        "name": "TechBargains Coupons",
-        "url": "https://techbargains.com/rss.xml",
+        "name": "9to5toys",
+        "url": "https://9to5toys.com/feed/",
         "retailer_field": "merchant",
     },
 ]
@@ -160,8 +164,24 @@ async def _scrape_feed(feed: dict) -> list[PublicCoupon]:
                 if merchant and merchant.text.strip():
                     # Make sure it's not an email or feed name
                     mtext = merchant.text.strip()
-                    if "@" not in mtext and "rss" not in mtext.lower() and "techbargains" not in mtext.lower():
+                    if "@" not in mtext and "rss" not in mtext.lower() and "techbargains" not in mtext.lower() and "slickdeals" not in mtext.lower():
                         retailer_name = mtext
+
+                # Try WordPress-style categories (Hip2Save, 9to5toys)
+                if not retailer_name:
+                    categories = item.find_all("category")
+                    for cat in categories:
+                        cat_text = cat.text.strip()
+                        for known in ["Amazon", "Walmart", "Target", "Best Buy", "eBay",
+                                      "Newegg", "Costco", "Home Depot", "Lowe's", "Kohl's",
+                                      "Macy's", "Overstock", "Adorama", "Woot", "Wayfair",
+                                      "Dell", "Samsung", "Apple", "Sony", "LG",
+                                      "Microsoft", "HP", "Lenovo", "Asus", "Acer"]:
+                            if known.lower() in cat_text.lower():
+                                retailer_name = known
+                                break
+                        if retailer_name:
+                            break
 
                 if not retailer_name:
                     # Try to extract from title
@@ -193,7 +213,7 @@ async def _scrape_feed(feed: dict) -> list[PublicCoupon]:
                         if domain:
                             # Extract main domain name
                             parts = domain.replace("www.", "").split(".")
-                            if parts and parts[0] not in ("rss", "feed", "techbargains"):
+                            if parts and parts[0] not in ("rss", "feed", "techbargains", "slickdeals", "hip2save", "9to5toys"):
                                 retailer_name = parts[0]
                             else:
                                 continue  # Skip if we can't determine retailer

@@ -13,6 +13,7 @@ import {
   getCouponRetailers,
   getCouponStatus,
   scrapeCoupons,
+  submitCoupon,
   type Coupon,
 } from "@/lib/api";
 
@@ -31,6 +32,20 @@ export default function CouponsPage() {
   const [error, setError] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [couponSourceConfigured, setCouponSourceConfigured] = useState<boolean | null>(null);
+  const [showSubmitForm, setShowSubmitForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<string>("");
+  const [submitForm, setSubmitForm] = useState({
+    code: "",
+    retailer: "",
+    title: "",
+    description: "",
+    discount_type: "percentage",
+    discount_value: "",
+    category: "",
+    product_url: "",
+    expires_at: "",
+  });
 
   const loadCoupons = useCallback(async () => {
     setLoadingCoupons(true);
@@ -121,6 +136,44 @@ export default function CouponsPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   }
 
+  async function handleSubmitCoupon(e: React.FormEvent) {
+    e.preventDefault();
+    if (!idToken) {
+      router.push("/login?redirect=/coupons");
+      return;
+    }
+    if (!submitForm.code.trim() || !submitForm.retailer.trim() || !submitForm.title.trim()) {
+      setSubmitResult("Code, retailer, and title are required.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitResult("");
+    try {
+      await submitCoupon(idToken, {
+        code: submitForm.code.trim(),
+        retailer: submitForm.retailer.trim(),
+        title: submitForm.title.trim(),
+        description: submitForm.description.trim() || undefined,
+        discount_type: submitForm.discount_type,
+        discount_value: submitForm.discount_value ? parseFloat(submitForm.discount_value) : 0,
+        category: submitForm.category.trim() || undefined,
+        product_url: submitForm.product_url.trim() || undefined,
+        expires_at: submitForm.expires_at.trim() || undefined,
+      });
+      setSubmitResult("Coupon submitted! It will appear after admin approval.");
+      setSubmitForm({
+        code: "", retailer: "", title: "", description: "",
+        discount_type: "percentage", discount_value: "", category: "",
+        product_url: "", expires_at: "",
+      });
+      setShowSubmitForm(false);
+    } catch (err) {
+      setSubmitResult(err instanceof Error ? err.message : "Submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function formatDiscount(coupon: Coupon): string {
     if (coupon.discount_type === "percentage") {
       return `${coupon.discount_value}% off`;
@@ -158,19 +211,144 @@ export default function CouponsPage() {
                   Coupon Codes
                 </h1>
                 <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Real promo codes from affiliate networks. Stack on top of deals for extra savings.
+                  Real promo codes from affiliate networks and deal feeds. Stack on top of deals for extra savings.
                 </p>
               </div>
-              {couponSourceConfigured && (
+              <div className="flex gap-2">
                 <button
-                  onClick={handleScrape}
-                  disabled={scraping}
-                  className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+                  onClick={() => setShowSubmitForm(!showSubmitForm)}
+                  className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900"
                 >
-                  {scraping ? "Fetching..." : "Fetch New Coupons"}
+                  Submit a Coupon
                 </button>
-              )}
+                {idToken && couponSourceConfigured && (
+                  <button
+                    onClick={handleScrape}
+                    disabled={scraping}
+                    className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+                  >
+                    {scraping ? "Fetching..." : "Fetch New Coupons"}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Submit coupon form */}
+            {showSubmitForm && (
+              <form onSubmit={handleSubmitCoupon} className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
+                  Submit a Coupon Code
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+                  Found a working promo code? Share it with the community. Submissions are reviewed before going live.
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Coupon Code *</label>
+                    <input
+                      type="text"
+                      value={submitForm.code}
+                      onChange={(e) => setSubmitForm({ ...submitForm, code: e.target.value })}
+                      placeholder="SAVE20"
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Retailer *</label>
+                    <input
+                      type="text"
+                      value={submitForm.retailer}
+                      onChange={(e) => setSubmitForm({ ...submitForm, retailer: e.target.value })}
+                      placeholder="amazon, walmart, target..."
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Title *</label>
+                    <input
+                      type="text"
+                      value={submitForm.title}
+                      onChange={(e) => setSubmitForm({ ...submitForm, title: e.target.value })}
+                      placeholder="20% off home & kitchen items"
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Discount Type</label>
+                    <select
+                      value={submitForm.discount_type}
+                      onChange={(e) => setSubmitForm({ ...submitForm, discount_type: e.target.value })}
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="fixed">Fixed ($)</option>
+                      <option value="free_shipping">Free Shipping</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Discount Value</label>
+                    <input
+                      type="number"
+                      value={submitForm.discount_value}
+                      onChange={(e) => setSubmitForm({ ...submitForm, discount_value: e.target.value })}
+                      placeholder="20"
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Category (optional)</label>
+                    <input
+                      type="text"
+                      value={submitForm.category}
+                      onChange={(e) => setSubmitForm({ ...submitForm, category: e.target.value })}
+                      placeholder="electronics, home, fashion..."
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Expires At (optional)</label>
+                    <input
+                      type="date"
+                      value={submitForm.expires_at}
+                      onChange={(e) => setSubmitForm({ ...submitForm, expires_at: e.target.value })}
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Product URL (optional)</label>
+                    <input
+                      type="url"
+                      value={submitForm.product_url}
+                      onChange={(e) => setSubmitForm({ ...submitForm, product_url: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    {submitting ? "Submitting..." : "Submit Coupon"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSubmitForm(false)}
+                    className="rounded-lg border border-zinc-200 px-5 py-2 text-sm font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {submitResult && (
+                  <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{submitResult}</p>
+                )}
+              </form>
+            )}
 
             {/* Not configured banner */}
             {couponSourceConfigured === false && (
@@ -207,9 +385,8 @@ export default function CouponsPage() {
           </div>
         </section>
 
-        {/* Only show filters and coupons if source is configured */}
-        {couponSourceConfigured && (
-          <>
+        {/* Filters and coupons — always shown (public RSS feeds are always available) */}
+        <>
         {/* Filters */}
         <section className="px-6 py-6 border-b border-zinc-100 dark:border-zinc-800/60">
           <div className="mx-auto max-w-6xl flex flex-wrap items-center gap-4">
@@ -367,8 +544,7 @@ export default function CouponsPage() {
             )}
           </div>
         </section>
-          </>
-        )}
+        </>
       </main>
 
       <Footer />

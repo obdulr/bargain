@@ -85,6 +85,8 @@ class DealResponse(BaseModel):
     is_profitable: bool
     status: str
     detected_at: str
+    # Auto-matched best coupon (if any applicable coupon exists)
+    best_coupon: Optional[dict] = None  # {code, discount_type, discount_value, effective_price, savings}
 
 
 @router.get("/deals/public", response_model=List[DealResponse])
@@ -156,7 +158,7 @@ async def list_public_deals(
             unique_deals.append(d)
 
     deals = unique_deals[offset:offset + limit]
-    return [_deal_to_response(d) for d in deals]
+    return [_deal_to_response(d, db) for d in deals]
 
 
 @router.get("/deals/public/{deal_id}", response_model=DealResponse)
@@ -176,7 +178,7 @@ async def get_public_deal(
     ).first()
     if not deal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deal not found")
-    return _deal_to_response(deal)
+    return _deal_to_response(deal, db)
 
 
 @router.post("/deals/scrape-amazon", response_model=dict)
@@ -1250,7 +1252,7 @@ async def list_deals(
     query = query.order_by(ArbitrageDeal.net_profit.desc())
     deals = query.offset(offset).limit(limit).all()
 
-    return [_deal_to_response(d) for d in deals]
+    return [_deal_to_response(d, db) for d in deals]
 
 
 @router.get("/deals/{deal_id}", response_model=DealResponse)
@@ -1263,7 +1265,7 @@ async def get_deal(
     deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    return _deal_to_response(deal)
+    return _deal_to_response(deal, db)
 
 
 @router.get("/deals/{deal_id}/prediction")
@@ -1455,12 +1457,20 @@ def _save_opportunity(db: Session, opp: ArbitrageOpportunity) -> ArbitrageDeal:
     return deal
 
 
-def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
-    """Convert an ArbitrageDeal model to a DealResponse."""
+def _deal_to_response(deal: ArbitrageDeal, db: Session = None) -> DealResponse:
+    """Convert an ArbitrageDeal model to a DealResponse.
+
+    When a db session is provided, auto-matches the best applicable coupon
+    for the deal's retailer and includes the effective price after coupon.
+    """
     image_url = deal.image_url
     # Don't filter out Amazon image URLs — ASIN-based URLs like
     # https://m.media-amazon.com/images/I/B0HCRVD7VP._AC_SL240_.jpg
     # are valid image URLs that Amazon serves correctly.
+
+    best_coupon = None
+    if db is not None:
+        best_coupon = _find_best_coupon_for_deal(deal, db)
 
     return DealResponse(
         id=str(deal.id),
@@ -1485,7 +1495,69 @@ def _deal_to_response(deal: ArbitrageDeal) -> DealResponse:
         is_profitable=deal.is_profitable,
         status=deal.status,
         detected_at=deal.detected_at.isoformat() if deal.detected_at else "",
+        best_coupon=best_coupon,
     )
+
+
+def _find_best_coupon_for_deal(deal: ArbitrageDeal, db: Session) -> Optional[dict]:
+    """Find the best applicable coupon for a deal and return a summary dict.
+
+    Returns None if no applicable coupon is found or if the coupon provides
+    no actual discount.
+    """
+    try:
+        from app.db.models import CouponCode
+        from app.services.coupon_scraper import calculate_discounted_price, ScrapedCoupon
+        from datetime import datetime
+
+        retailer = (getattr(deal, "retailer", None) or deal.buy_platform or "amazon").lower()
+
+        # Also try matching without the underscore variant (e.g. "best_buy" -> "bestbuy")
+        retailer_variants = [retailer, retailer.replace("_", "")]
+
+        query = db.query(CouponCode).filter(
+            CouponCode.retailer.in_(retailer_variants),
+            CouponCode.status == "active",
+            (CouponCode.expires_at.is_(None)) | (CouponCode.expires_at > datetime.utcnow()),
+        )
+
+        if deal.category:
+            query = query.filter(
+                (CouponCode.category.is_(None)) | (CouponCode.category == deal.category.lower())
+            )
+
+        coupons = query.order_by(CouponCode.discount_value.desc()).limit(5).all()
+
+        best = None
+        best_savings = Decimal("0")
+        for coupon in coupons:
+            scraped = ScrapedCoupon(
+                code=coupon.code,
+                retailer=coupon.retailer,
+                title=coupon.title,
+                discount_type=coupon.discount_type,
+                discount_value=coupon.discount_value or Decimal("0"),
+                min_purchase=coupon.min_purchase,
+                max_discount=coupon.max_discount,
+            )
+            effective_price, savings = calculate_discounted_price(
+                Decimal(str(deal.buy_price)), scraped
+            )
+            if savings > best_savings:
+                best_savings = savings
+                best = {
+                    "id": str(coupon.id),
+                    "code": coupon.code,
+                    "discount_type": coupon.discount_type,
+                    "discount_value": float(coupon.discount_value) if coupon.discount_value else 0,
+                    "effective_price": float(effective_price),
+                    "savings": float(savings),
+                    "title": coupon.title[:100],
+                }
+
+        return best
+    except Exception:
+        return None
 
 
 # ─── Short Link Redirect (GET, for social media posts) ─────────────────────

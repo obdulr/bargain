@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     MIN_DEAL_SCORE_TO_POST: float = 15.0  # Minimum deal score required to post
 
     # Coupon Scraping
-    COUPON_AUTO_SCRAPE: bool = False
+    COUPON_AUTO_SCRAPE: bool = True
     COUPON_SCRAPE_INTERVAL_HOURS: int = 6
 
     # ─── Notification Channels ────────────────────────────────────────────

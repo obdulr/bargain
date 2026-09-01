@@ -48,6 +48,8 @@ class CouponResponse(BaseModel):
     success_count: int
     status: str
     scraped_at: str
+    submitted_by: Optional[str] = None
+    submitted_at: Optional[str] = None
 
 
 class ScrapeRequest(BaseModel):
@@ -63,6 +65,20 @@ class ScrapeResponse(BaseModel):
 class ApplyCouponRequest(BaseModel):
     deal_id: UUID
     coupon_id: UUID
+
+
+class SubmitCouponRequest(BaseModel):
+    code: str
+    retailer: str
+    title: str
+    description: Optional[str] = None
+    discount_type: str = "percentage"  # percentage, fixed, free_shipping
+    discount_value: float = 0
+    min_purchase: Optional[float] = None
+    max_discount: Optional[float] = None
+    category: Optional[str] = None
+    product_url: Optional[str] = None
+    expires_at: Optional[str] = None  # ISO date string
 
 
 class AppliedCouponResponse(BaseModel):
@@ -429,6 +445,152 @@ async def find_best_coupons_for_deal(
     return [_coupon_to_response(c) for c in coupons]
 
 
+@router.get("/deal/{deal_id}/best/public", response_model=List[CouponResponse])
+async def find_best_coupons_for_deal_public(
+    deal_id: UUID,
+    limit: int = Query(5, le=20),
+    db: Session = Depends(get_db),
+):
+    """Public endpoint — find best coupons for a deal without auth."""
+    deal = db.query(ArbitrageDeal).filter(ArbitrageDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    retailer = (deal.buy_platform or "amazon").lower()
+
+    query = db.query(CouponCode).filter(
+        CouponCode.retailer == retailer,
+        CouponCode.status == "active",
+        (CouponCode.expires_at.is_(None)) | (CouponCode.expires_at > datetime.utcnow()),
+    )
+
+    if deal.category:
+        query = query.filter(
+            (CouponCode.category.is_(None)) | (CouponCode.category == deal.category.lower())
+        )
+
+    coupons = query.order_by(CouponCode.discount_value.desc()).limit(limit).all()
+    return [_coupon_to_response(c) for c in coupons]
+
+
+@router.post("/submit", response_model=CouponResponse, status_code=201)
+async def submit_coupon(
+    body: SubmitCouponRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Submit a coupon code as a regular user.
+
+    User-submitted coupons are stored with status='pending' and require
+    admin approval before they appear in the public feed.
+    """
+    # Basic validation
+    if not body.code.strip() or not body.retailer.strip() or not body.title.strip():
+        raise HTTPException(status_code=400, detail="Code, retailer, and title are required")
+
+    # Check for duplicate (same code + retailer) — reject if already active
+    existing = db.query(CouponCode).filter(
+        CouponCode.code == body.code.strip().upper(),
+        CouponCode.retailer == body.retailer.strip().lower(),
+    ).first()
+    if existing and existing.status in ("active", "pending"):
+        raise HTTPException(status_code=409, detail="This coupon code has already been submitted")
+
+    # Parse expiry date if provided
+    expires_at = None
+    if body.expires_at:
+        try:
+            expires_at = datetime.fromisoformat(body.expires_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid expires_at format. Use ISO 8601.")
+
+    coupon = CouponCode(
+        code=body.code.strip().upper(),
+        retailer=body.retailer.strip().lower(),
+        title=body.title.strip()[:500],
+        description=body.description,
+        discount_type=body.discount_type,
+        discount_value=Decimal(str(body.discount_value)),
+        min_purchase=Decimal(str(body.min_purchase)) if body.min_purchase else None,
+        max_discount=Decimal(str(body.max_discount)) if body.max_discount else None,
+        category=body.category.lower() if body.category else None,
+        product_url=body.product_url,
+        source="user",
+        source_url=body.product_url,
+        expires_at=expires_at,
+        status="pending",
+        submitted_by=current_user.id,
+        submitted_at=datetime.utcnow(),
+    )
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+    return _coupon_to_response(coupon)
+
+
+@router.post("/{coupon_id}/approve", response_model=CouponResponse)
+async def approve_coupon(
+    coupon_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Approve a user-submitted coupon. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    coupon = db.query(CouponCode).filter(CouponCode.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    if coupon.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Coupon is not pending (status: {coupon.status})")
+
+    coupon.status = "active"
+    coupon.verified = True
+    coupon.verified_at = datetime.utcnow()
+    db.commit()
+    db.refresh(coupon)
+    return _coupon_to_response(coupon)
+
+
+@router.post("/{coupon_id}/reject", response_model=dict)
+async def reject_coupon(
+    coupon_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reject a user-submitted coupon. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    coupon = db.query(CouponCode).filter(CouponCode.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    if coupon.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Coupon is not pending (status: {coupon.status})")
+
+    coupon.status = "expired"
+    db.commit()
+    return {"status": "rejected", "id": str(coupon_id)}
+
+
+@router.get("/pending", response_model=List[CouponResponse])
+async def list_pending_coupons(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List pending user-submitted coupons. Admin only."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    coupons = (
+        db.query(CouponCode)
+        .filter(CouponCode.status == "pending")
+        .order_by(CouponCode.submitted_at.desc())
+        .all()
+    )
+    return [_coupon_to_response(c) for c in coupons]
+
+
 @router.delete("/all", response_model=dict)
 async def delete_all_coupons(
     current_user: User = Depends(get_current_user),
@@ -534,4 +696,6 @@ def _coupon_to_response(c: CouponCode) -> CouponResponse:
         success_count=c.success_count or 0,
         status=c.status,
         scraped_at=c.scraped_at.isoformat() if c.scraped_at else "",
+        submitted_by=str(c.submitted_by) if c.submitted_by else None,
+        submitted_at=c.submitted_at.isoformat() if c.submitted_at else None,
     )

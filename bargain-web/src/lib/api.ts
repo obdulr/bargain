@@ -123,6 +123,8 @@ export interface Coupon {
   success_count: number;
   status: string;
   scraped_at: string;
+  submitted_by?: string;
+  submitted_at?: string;
 }
 
 export async function getCoupons(
@@ -205,6 +207,32 @@ export async function getBestCouponsForDeal(token: string, dealId: string) {
   return fetchWithAuth(`/api/v1/coupons/deal/${dealId}/best`, token, { method: "GET" }) as Promise<Coupon[]>;
 }
 
+export async function getBestCouponsForDealPublic(dealId: string) {
+  const res = await fetch(`${API_URL}/api/v1/coupons/deal/${dealId}/best/public`);
+  if (!res.ok) return [];
+  return res.json() as Promise<Coupon[]>;
+}
+
+export async function submitCoupon(
+  token: string,
+  data: {
+    code: string;
+    retailer: string;
+    title: string;
+    description?: string;
+    discount_type?: string;
+    discount_value?: number;
+    category?: string;
+    product_url?: string;
+    expires_at?: string;
+  }
+) {
+  return fetchWithAuth("/api/v1/coupons/submit", token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }) as Promise<Coupon>;
+}
+
 // ─── Arbitrage Deals ────────────────────────────────────────────────────────
 
 export interface ArbitrageDeal {
@@ -233,6 +261,15 @@ export interface ArbitrageDeal {
   applied_coupon_code?: string;
   coupon_discount?: number;
   original_buy_price?: number;
+  best_coupon?: {
+    id: string;
+    code: string;
+    discount_type: string;
+    discount_value: number;
+    effective_price: number;
+    savings: number;
+    title: string;
+  };
 }
 
 export interface Niche {

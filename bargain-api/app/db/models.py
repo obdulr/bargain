@@ -254,10 +254,13 @@ class CouponCode(Base):
     times_used = Column(Integer, default=0)
     success_count = Column(Integer, default=0)
     fail_count = Column(Integer, default=0)
-    status = Column(String(20), default="active")  # active, expired, used_up, unverified
+    status = Column(String(20), default="active")  # active, expired, used_up, unverified, pending
     scraped_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # User-submitted coupon fields
+    submitted_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
 
 
 class NotificationLog(Base):
