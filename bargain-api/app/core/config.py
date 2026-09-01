@@ -188,6 +188,9 @@ class Settings(BaseSettings):
     # Get credentials: https://developers.pinterest.com/
     PINTEREST_ACCESS_TOKEN: str = ""
     PINTEREST_BOARD_ID: str = ""
+    PINTEREST_REFRESH_TOKEN: str = ""
+    PINTEREST_APP_ID: str = ""
+    PINTEREST_APP_SECRET: str = ""
 
     # Fallback image used when a deal has no/invalid image URL
     FALLBACK_IMAGE_URL: str = "https://www.bargainhuntrs.com/logos/profile-icon-dark.png"

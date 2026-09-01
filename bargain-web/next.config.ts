@@ -38,6 +38,10 @@ const withPWA = withPWAInit({
   dest: "public",
   register: true,
   disable: process.env.NODE_ENV === "development",
+  // Exclude Cloudflare Pages config files from precaching
+  // (they're not pages and return 404 when fetched)
+  extendDefaultRuntimeCaching: true,
+  buildExcludes: [/_headers$/, /_redirects$/, /_worker\.js$/],
 });
 
 export default withPWA(nextConfig);

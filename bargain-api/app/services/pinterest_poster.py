@@ -17,6 +17,7 @@ Pinterest API v5 docs: https://developers.pinterest.com/docs/api/v5/
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -28,6 +29,7 @@ from app.services.utm_service import add_utm_parameters
 logger = logging.getLogger(__name__)
 
 PINTEREST_API_BASE = "https://api.pinterest.com/v5"
+PINTEREST_TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"
 
 # Pinterest limits: title max 100 chars, description max 500 chars
 MAX_TITLE_LENGTH = 100
@@ -37,6 +39,56 @@ MAX_DESCRIPTION_LENGTH = 500
 def is_configured() -> bool:
     """Check if Pinterest posting is configured."""
     return bool(settings.PINTEREST_ACCESS_TOKEN and settings.PINTEREST_BOARD_ID)
+
+
+async def refresh_access_token() -> Optional[str]:
+    """Refresh the Pinterest access token using the refresh token.
+
+    Pinterest access tokens expire in 30 days. This should be called
+    when a 401 is received or periodically (e.g. weekly).
+
+    Returns the new access token on success, None on failure.
+    """
+    refresh_token = getattr(settings, "PINTEREST_REFRESH_TOKEN", "")
+    app_id = getattr(settings, "PINTEREST_APP_ID", "")
+    app_secret = getattr(settings, "PINTEREST_APP_SECRET", "")
+
+    if not refresh_token or not app_id or not app_secret:
+        logger.warning("Pinterest: cannot refresh token — missing refresh_token, app_id, or app_secret")
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                PINTEREST_TOKEN_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                },
+                auth=(app_id, app_secret),
+            )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                new_token = data.get("access_token")
+                new_refresh = data.get("refresh_token")
+                logger.info("Pinterest: access token refreshed successfully")
+                # Update the in-memory settings so subsequent calls use the new token
+                # Note: this won't persist across restarts — for persistence, update Render env vars
+                os.environ["PINTEREST_ACCESS_TOKEN"] = new_token
+                if new_refresh:
+                    os.environ["PINTEREST_REFRESH_TOKEN"] = new_refresh
+                # Reload settings
+                settings.PINTEREST_ACCESS_TOKEN = new_token
+                if new_refresh:
+                    settings.PINTEREST_REFRESH_TOKEN = new_refresh
+                return new_token
+            else:
+                logger.error(f"Pinterest: token refresh failed {resp.status_code}: {resp.text[:200]}")
+                return None
+    except Exception as e:
+        logger.error(f"Pinterest: token refresh error: {e}")
+        return None
 
 
 def _build_pin_title(title: str) -> str:
@@ -140,6 +192,15 @@ async def post_deal_to_pinterest(
                         pin_id = data.get("id", "")
                         logger.info(f"Pinterest: pin created (id: {pin_id})")
                         return {"status": "success", "pin_id": pin_id, "data": data}
+
+                    # Auto-refresh token on 401 and retry once
+                    if resp.status_code == 401 and attempt == 0:
+                        logger.warning("Pinterest: 401 — attempting token refresh")
+                        new_token = await refresh_access_token()
+                        if new_token:
+                            headers["Authorization"] = f"Bearer {new_token}"
+                            continue
+                        return {"status": "error", "error": "HTTP 401: token expired and refresh failed"}
 
                     if resp.status_code == 429:
                         import asyncio
