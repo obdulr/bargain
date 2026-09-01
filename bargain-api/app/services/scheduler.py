@@ -576,26 +576,54 @@ class ScanScheduler:
                     diverse_deals.append(d)
                 candidate_deals = diverse_deals
 
-                # Title-based dedup: skip deals with the same title as recently posted deals
-                recent_cutoff = datetime.utcnow() - timedelta(hours=48)
+                # Title-based + URL-based dedup: skip deals that match recently posted deals
+                # Use 7-day lookback to prevent the same deal from reappearing over multiple days
+                dedup_cutoff = datetime.utcnow() - timedelta(days=7)
                 recently_posted_titles = set()
+                recently_posted_urls = set()
                 try:
                     recent_posts = db.query(ArbitrageDeal).filter(
                         ArbitrageDeal.alerted_at != None,
-                        ArbitrageDeal.alerted_at > recent_cutoff,
+                        ArbitrageDeal.alerted_at > dedup_cutoff,
                     ).all()
                     recently_posted_titles = {d.title.lower().strip() for d in recent_posts}
+                    # Extract product SKU/identifier from buy_url for URL-based dedup
+                    for d in recent_posts:
+                        url = (d.buy_url or "").lower()
+                        # Extract prodsku from Walmart URLs, ASIN from Amazon, etc.
+                        import re
+                        sku_match = re.search(r'prodsku[=:](\w+)', url)
+                        asin_match = re.search(r'(/dp/|/ip/)(\w+)', url)
+                        if sku_match:
+                            recently_posted_urls.add(sku_match.group(1))
+                        elif asin_match:
+                            recently_posted_urls.add(asin_match.group(2))
                 except Exception:
                     pass
-                if recently_posted_titles:
+                if recently_posted_titles or recently_posted_urls:
                     before = len(candidate_deals)
-                    candidate_deals = [
-                        d for d in candidate_deals
-                        if d.title.lower().strip() not in recently_posted_titles
-                    ]
+                    filtered_deals = []
+                    for d in candidate_deals:
+                        title_key = d.title.lower().strip()
+                        url = (d.buy_url or "").lower()
+                        # Check title dedup
+                        if title_key in recently_posted_titles:
+                            continue
+                        # Check URL/SKU dedup
+                        import re
+                        sku_match = re.search(r'prodsku[=:](\w+)', url)
+                        asin_match = re.search(r'(/dp/|/ip/)(\w+)', url)
+                        sku = sku_match.group(1) if sku_match else None
+                        asin = asin_match.group(2) if asin_match else None
+                        if sku and sku in recently_posted_urls:
+                            continue
+                        if asin and asin in recently_posted_urls:
+                            continue
+                        filtered_deals.append(d)
+                    candidate_deals = filtered_deals
                     skipped = before - len(candidate_deals)
                     if skipped:
-                        logger.info(f"Skipped {skipped} recently-posted deals (title dedup)")
+                        logger.info(f"Skipped {skipped} recently-posted deals (title+URL dedup, 7-day lookback)")
 
                 # Only post deals that have affiliate links
                 affiliate_domains = ["sjv.io", "7eer.net", "pxf.io", "evyy.net",
@@ -762,6 +790,9 @@ class ScanScheduler:
                 logger.error(f"Pinterest posting failed: {e}", exc_info=True)
 
             # ─── Send deal alerts to users via email + push ─────────────────
+            # NOTE: This only sends to non-X channels (Discord, Telegram, push, SMS).
+            # X/Twitter posting is handled exclusively by the X posting section above
+            # with proper dedup. We mark the deal as alerted to prevent re-posting.
             try:
                 from app.services.notification_service import distribute_deal, DealInfo
 
@@ -783,10 +814,10 @@ class ScanScheduler:
                     posted_count = sum(1 for r in results if r.get("status") == "success")
                     if posted_count:
                         logger.info(f"Deal notifications sent: {posted_count} channels for '{best_deal.title[:40]}'")
-                        best_deal.alerted_at = datetime.utcnow()
-                        db.commit()
-                    else:
-                        logger.info("No deal notifications sent (no recipients or channels configured)")
+                    # Always mark as alerted to prevent re-posting in future cycles,
+                    # even if no channels succeeded (avoids infinite retry loops)
+                    best_deal.alerted_at = datetime.utcnow()
+                    db.commit()
                 else:
                     logger.info("No new deals to notify users about")
             except Exception as e:
@@ -934,7 +965,16 @@ class ScanScheduler:
                 deal = _save_opportunity(db, opp)
                 db.commit()
 
-                # Distribute to all notification channels (Discord, Telegram, Twitter, Facebook, SMS)
+                # Skip notification if this deal was already alerted (posted to
+                # social media or notified before). This prevents duplicate posts
+                # across multiple scheduler cycles and container restarts.
+                if deal.alerted_at is not None:
+                    logger.info(f"Skipping notification for {opp.asin} — already alerted at {deal.alerted_at}")
+                    continue
+
+                # Distribute to notification channels (Discord, Telegram, Facebook, SMS, push)
+                # NOTE: X/Twitter posting is NOT done here — it's handled exclusively
+                # by _scrape_and_post_to_x() which has proper dedup logic.
                 deal_info = DealInfo.from_opportunity(opp)
                 # SMS recipients are filtered by niche subscription: a user with
                 # no subscriptions receives all niches; otherwise only their picks.

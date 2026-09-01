@@ -294,17 +294,20 @@ async def distribute_deal(
     if settings.TELEGRAM_BOT_TOKEN:
         channels["telegram"] = asyncio.create_task(send_telegram(deal))
 
-    # X/Twitter: try direct API v2 first (no queue limits), fall back to Buffer
-    # The direct poster is in x_direct_poster.py; Buffer is in x_poster.py
-    # We run both if configured — direct posts immediately, Buffer queues for IG/FB
-    from app.services import x_direct_poster, reddit_poster, discord_poster
+    # X/Twitter posting is handled EXCLUSIVELY by the scheduler's
+    # _scrape_and_post_to_x() function, which has proper dedup logic
+    # (title-based, URL-based, and alerted_at checks). Posting to X from
+    # distribute_deal() caused duplicate posts because it bypassed dedup.
+    #
+    # DO NOT post to X/Twitter from here. Only post to non-X channels.
+    from app.services import reddit_poster, discord_poster
 
     # Compute discount % from buy/sell price
     discount_pct = 0
     if deal.sell_price and deal.buy_price and deal.sell_price > deal.buy_price:
         discount_pct = int(round((1 - float(deal.buy_price) / float(deal.sell_price)) * 100))
 
-    # Common kwargs for all direct posters
+    # Common kwargs for direct posters (non-X channels only)
     poster_kwargs = {
         "title": deal.title,
         "deal_price": float(deal.buy_price) if deal.buy_price else 0,
@@ -316,20 +319,13 @@ async def distribute_deal(
         "deal_tier": "glitch" if deal.is_glitch else (deal.deal_tier or "clearance"),
     }
 
-    if x_direct_poster.is_configured():
-        channels["x_direct"] = asyncio.create_task(
-            x_direct_poster.post_deal_to_x_direct(**poster_kwargs)
-        )
-
     # Reddit (post to r/deals, r/buildapcsales, etc.)
     if reddit_poster.is_configured():
         channels["reddit"] = asyncio.create_task(
             reddit_poster.post_deal_to_reddit(**poster_kwargs)
         )
 
-    # Legacy Twitter/Facebook (kept for backward compat)
-    if settings.TWITTER_API_KEY:
-        channels["twitter"] = asyncio.create_task(send_twitter(deal))
+    # Facebook (no X/Twitter — that's handled by the scheduler)
     if settings.FACEBOOK_PAGE_ACCESS_TOKEN:
         channels["facebook"] = asyncio.create_task(send_facebook(deal))
 
