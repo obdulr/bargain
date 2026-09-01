@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import NewsletterPopup from "@/components/NewsletterPopup";
 import LiveActivityFeed from "@/components/LiveActivityFeed";
 import { getPublicDeals, clickAffiliatePublic, getCommunityStats, addUtmParameters, type ArbitrageDeal, type CommunityStats } from "@/lib/api";
 
@@ -610,6 +611,7 @@ export default function HomePageContent() {
       <LiveActivityFeed />
 
       <Footer />
+      <NewsletterPopup />
     </div>
   );
 }
