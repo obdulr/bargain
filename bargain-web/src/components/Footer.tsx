@@ -67,6 +67,7 @@ export default function Footer() {
               <li><Link href="/#features" className="hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors">Features</Link></li>
               <li><Link href="/pricing" className="hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors">Pricing</Link></li>
               <li><Link href="/dashboard" className="hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors">Dashboard</Link></li>
+              <li><Link href="/guides" className="hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors">Guides</Link></li>
               <li><Link href="/#vs-competitors" className="hover:text-zinc-900 dark:hover:text-zinc-50 transition-colors">vs. Competitors</Link></li>
             </ul>
           </div>

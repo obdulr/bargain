@@ -27,6 +27,11 @@ export async function onRequestGet() {
     { loc: `${BASE_URL}/coupons`, lastmod: now, changefreq: "daily", priority: "0.6" },
     { loc: `${BASE_URL}/tools/profit-calculator`, lastmod: now, changefreq: "monthly", priority: "0.7" },
     { loc: `${BASE_URL}/tools/listing-generator`, lastmod: now, changefreq: "monthly", priority: "0.7" },
+    { loc: `${BASE_URL}/guides`, lastmod: now, changefreq: "weekly", priority: "0.8" },
+    { loc: `${BASE_URL}/guides/how-to-find-price-glitches`, lastmod: now, changefreq: "monthly", priority: "0.8" },
+    { loc: `${BASE_URL}/guides/amazon-arbitrage-guide`, lastmod: now, changefreq: "monthly", priority: "0.8" },
+    { loc: `${BASE_URL}/guides/retail-arbitrage-for-beginners`, lastmod: now, changefreq: "monthly", priority: "0.8" },
+    { loc: `${BASE_URL}/guides/best-times-to-find-deals`, lastmod: now, changefreq: "monthly", priority: "0.7" },
   ];
 
   // Fetch active deals from the public API (paginate, max 200 per request)
