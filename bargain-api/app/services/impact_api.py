@@ -56,6 +56,40 @@ def _is_localized_url(url: str) -> bool:
     return False
 
 
+# Common non-English product title keywords (German, French, Spanish, Italian)
+# Used to filter out localized product names that slip past URL filtering
+NON_ENGLISH_TITLE_KEYWORDS = (
+    # German
+    "damen", "weiblich", "herren", "männlich", "kinder", "kleid", "hose",
+    "pullover", "jacke", "mantel", "rock", "bluse", "hemd", "schuhe",
+    "stiefel", "sandalen", "tasche", "rucksack", "geldbörse", "schmuck",
+    "kette", "ring", "ohrringe", "armband", "uhr", "sonnenbrille",
+    "hut", "mütze", "schal", "handschuhe", "unterwäsche", "bikini",
+    "bademode", "nachtwäsche", "hausanzug", "pyjama", "morgenmantel",
+    # French
+    "femme", "homme", "enfant", "robe", "pantalon", "chemise", "veste",
+    "manteau", "jupe", "blouse", "chaussures", "bottes", "sac",
+    # Spanish
+    "mujer", "hombre", "niño", "vestido", "pantalón", "camisa",
+    # Italian
+    "donna", "uomo", "bambino", "vestito", "pantaloni", "camicia",
+)
+
+
+def _is_non_english_title(title: str) -> bool:
+    """Return True if a product title appears to be non-English.
+
+    Checks for common German/French/Spanish/Italian clothing keywords
+    that ADOR and similar catalogs include in localized product names.
+    """
+    if not title:
+        return False
+    title_lower = title.lower()
+    matches = sum(1 for kw in NON_ENGLISH_TITLE_KEYWORDS if kw in title_lower)
+    # 2+ non-English keywords = very likely localized
+    return matches >= 2
+
+
 def _is_configured() -> bool:
     return bool(getattr(settings, "IMPACT_ACCOUNT_SID", "")) and \
            bool(getattr(settings, "IMPACT_AUTH_TOKEN", ""))
@@ -518,6 +552,10 @@ async def fetch_all_impact_deals() -> list[dict]:
     for product in products:
         # Final safety filter: skip any localized URLs that slipped through
         if _is_localized_url(product.url):
+            filtered_count += 1
+            continue
+        # Skip non-English product titles (German/French/Spanish/Italian)
+        if _is_non_english_title(product.name):
             filtered_count += 1
             continue
 
