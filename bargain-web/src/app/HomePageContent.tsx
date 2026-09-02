@@ -467,6 +467,21 @@ export default function HomePageContent() {
                             )}
                           </div>
 
+                          {/* Best coupon badge */}
+                          {deal.best_coupon && deal.best_coupon.savings > 0 && (
+                            <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 dark:bg-emerald-950/40">
+                              <svg className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 1l-2.5 2.5L10 6l2.5-2.5L10 1zM5 6l-2.5 2.5L5 11l2.5-2.5L5 6zm10 0l-2.5 2.5L15 11l2.5-2.5L15 6zm-5 5l-2.5 2.5L10 16l2.5-2.5L10 11z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                Code: {deal.best_coupon.code} → ${deal.best_coupon.effective_price.toFixed(2)}
+                              </span>
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                (save ${deal.best_coupon.savings.toFixed(2)})
+                              </span>
+                            </div>
+                          )}
+
                           {/* CTA */}
                           <div className="mt-auto">
                             {deal.deal_tier === "glitch" ? (
