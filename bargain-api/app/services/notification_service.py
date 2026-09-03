@@ -268,6 +268,7 @@ async def distribute_deal(
     deal: DealInfo,
     db: Session,
     push_recipients: Optional[list[str]] = None,
+    sms_recipients: Optional[list[str]] = None,
 ) -> dict:
     """Distribute a deal to all configured notification channels.
 
@@ -275,6 +276,7 @@ async def distribute_deal(
         deal: DealInfo with deal details
         db: Database session for logging
         push_recipients: List of FCM tokens for push notifications (users with push enabled)
+        sms_recipients: List of phone numbers for SMS alerts (Hunter tier users with SMS opted in)
 
     Returns:
         Dict of channel -> success bool

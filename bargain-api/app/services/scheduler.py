@@ -323,67 +323,6 @@ class ScanScheduler:
         self._last_deal_scrape_at = datetime.utcnow()
         logger.info("Starting deal scrape + X posting cycle...")
 
-    async def _run_newsletter_daily_loop(self):
-        """Background loop that sends the daily deal digest at 8 AM ET."""
-        logger.info("Newsletter daily digest loop started (8 AM ET daily)")
-        while self._running:
-            try:
-                now = datetime.utcnow()
-                # 8 AM ET = 12 PM UTC (during EDT) or 1 PM UTC (during EST)
-                # Simple approach: check every hour, send at 12 UTC if not already sent today
-                if now.hour == 12 and self._last_newsletter_daily_at is not None:
-                    if self._last_newsletter_daily_at.date() == now.date():
-                        # Already sent today
-                        pass
-                    else:
-                        from app.services.newsletter_service import send_daily_digest
-                        sent = send_daily_digest()
-                        logger.info(f"Daily digest sent to {sent} subscribers")
-                        self._last_newsletter_daily_at = now
-                elif now.hour == 12 and self._last_newsletter_daily_at is None:
-                    from app.services.newsletter_service import send_daily_digest
-                    sent = send_daily_digest()
-                    logger.info(f"Daily digest sent to {sent} subscribers")
-                    self._last_newsletter_daily_at = now
-            except Exception as e:
-                logger.error(f"Newsletter daily loop error: {e}", exc_info=True)
-            try:
-                await asyncio.sleep(3600)  # Check every hour
-            except asyncio.CancelledError:
-                logger.info("Newsletter daily loop cancelled")
-                break
-
-    async def _run_newsletter_weekly_loop(self):
-        """Background loop that sends the weekly deal digest on Mondays at 9 AM ET."""
-        logger.info("Newsletter weekly digest loop started (Mondays 9 AM ET)")
-        while self._running:
-            try:
-                now = datetime.utcnow()
-                # Monday = 0, 9 AM ET ≈ 13 UTC (EDT) or 14 UTC (EST)
-                if now.weekday() == 0 and now.hour == 13:
-                    if self._last_newsletter_weekly_at is not None:
-                        days_since = (now.date() - self._last_newsletter_weekly_at.date()).days
-                        if days_since < 7:
-                            # Already sent this week
-                            pass
-                        else:
-                            from app.services.newsletter_service import send_weekly_digest
-                            sent = send_weekly_digest()
-                            logger.info(f"Weekly digest sent to {sent} subscribers")
-                            self._last_newsletter_weekly_at = now
-                    else:
-                        from app.services.newsletter_service import send_weekly_digest
-                        sent = send_weekly_digest()
-                        logger.info(f"Weekly digest sent to {sent} subscribers")
-                        self._last_newsletter_weekly_at = now
-            except Exception as e:
-                logger.error(f"Newsletter weekly loop error: {e}", exc_info=True)
-            try:
-                await asyncio.sleep(3600)  # Check every hour
-            except asyncio.CancelledError:
-                logger.info("Newsletter weekly loop cancelled")
-                break
-
         from app.services.amazon_deals_scraper import scrape_all_amazon_deals, save_deals_to_database
         from app.services.rss_deals_scraper import scrape_all_rss_feeds, save_rss_deals_to_database
         from app.services.impact_api import fetch_all_impact_deals, _is_configured as impact_configured
@@ -825,6 +764,67 @@ class ScanScheduler:
 
         finally:
             db.close()
+
+    async def _run_newsletter_daily_loop(self):
+        """Background loop that sends the daily deal digest at 8 AM ET."""
+        logger.info("Newsletter daily digest loop started (8 AM ET daily)")
+        while self._running:
+            try:
+                now = datetime.utcnow()
+                # 8 AM ET = 12 PM UTC (during EDT) or 1 PM UTC (during EST)
+                # Simple approach: check every hour, send at 12 UTC if not already sent today
+                if now.hour == 12 and self._last_newsletter_daily_at is not None:
+                    if self._last_newsletter_daily_at.date() == now.date():
+                        # Already sent today
+                        pass
+                    else:
+                        from app.services.newsletter_service import send_daily_digest
+                        sent = send_daily_digest()
+                        logger.info(f"Daily digest sent to {sent} subscribers")
+                        self._last_newsletter_daily_at = now
+                elif now.hour == 12 and self._last_newsletter_daily_at is None:
+                    from app.services.newsletter_service import send_daily_digest
+                    sent = send_daily_digest()
+                    logger.info(f"Daily digest sent to {sent} subscribers")
+                    self._last_newsletter_daily_at = now
+            except Exception as e:
+                logger.error(f"Newsletter daily loop error: {e}", exc_info=True)
+            try:
+                await asyncio.sleep(3600)  # Check every hour
+            except asyncio.CancelledError:
+                logger.info("Newsletter daily loop cancelled")
+                break
+
+    async def _run_newsletter_weekly_loop(self):
+        """Background loop that sends the weekly deal digest on Mondays at 9 AM ET."""
+        logger.info("Newsletter weekly digest loop started (Mondays 9 AM ET)")
+        while self._running:
+            try:
+                now = datetime.utcnow()
+                # Monday = 0, 9 AM ET ≈ 13 UTC (EDT) or 14 UTC (EST)
+                if now.weekday() == 0 and now.hour == 13:
+                    if self._last_newsletter_weekly_at is not None:
+                        days_since = (now.date() - self._last_newsletter_weekly_at.date()).days
+                        if days_since < 7:
+                            # Already sent this week
+                            pass
+                        else:
+                            from app.services.newsletter_service import send_weekly_digest
+                            sent = send_weekly_digest()
+                            logger.info(f"Weekly digest sent to {sent} subscribers")
+                            self._last_newsletter_weekly_at = now
+                    else:
+                        from app.services.newsletter_service import send_weekly_digest
+                        sent = send_weekly_digest()
+                        logger.info(f"Weekly digest sent to {sent} subscribers")
+                        self._last_newsletter_weekly_at = now
+            except Exception as e:
+                logger.error(f"Newsletter weekly loop error: {e}", exc_info=True)
+            try:
+                await asyncio.sleep(3600)  # Check every hour
+            except asyncio.CancelledError:
+                logger.info("Newsletter weekly loop cancelled")
+                break
 
     async def _run_coupon_scrape_loop(self):
         """Background loop that scrapes coupons from Impact + public RSS feeds
