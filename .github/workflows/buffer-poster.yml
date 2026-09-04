@@ -3,6 +3,8 @@ name: Buffer Auto-Poster
 on:
   schedule:
     # 9:00 AM, 1:00 PM, 5:00 PM ET (13:00, 17:00, 21:00 UTC during EDT)
+    # GitHub Actions cron runs in UTC. ET is UTC-4 (EDT, Mar-Nov) or UTC-5 (EST, Nov-Mar).
+    # These times are approximate but close enough — the key is regular posting.
     - cron: '0 13,17,21 * * *'
   workflow_dispatch:
 
@@ -11,19 +13,22 @@ permissions:
 
 jobs:
   scrape-and-post:
-    name: Trigger scrape and post cycle
+    name: Trigger deal posting to X
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger scrape + post cycle
+      - name: Post new deals to X via Buffer
         run: |
-          echo "Triggering scrape + post cycle at $(date -u)"
+          echo "Triggering deal posting at $(date -u)"
 
+          # The post-new-to-x/public endpoint posts already-scraped deals
+          # that have affiliate links. No auth required.
+          # The Render scheduler (kept alive by health-check.yml) handles scraping.
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             --max-time 300 \
             --retry 3 \
             --retry-delay 10 \
             --retry-max-time 60 \
-            https://api.bargainhuntrs.com/api/v1/arbitrage/deals/scrape-all/public)
+            "https://api.bargainhuntrs.com/api/v1/arbitrage/deals/post-new-to-x/public?max_posts=5")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
@@ -32,8 +37,16 @@ jobs:
           echo "Response: $BODY"
 
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Scrape+post failed with HTTP $HTTP_CODE"
+            echo "ERROR: Deal posting failed with HTTP $HTTP_CODE"
             exit 1
           fi
 
-          echo "Scrape+post cycle completed successfully"
+          # Parse the posted count from the response
+          POSTED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('posted',0))" 2>/dev/null || echo "0")
+          echo "Deals posted: $POSTED"
+
+          if [ "$POSTED" -eq 0 ]; then
+            echo "No new deals were posted (may be none available or all already posted)"
+          fi
+
+          echo "Deal posting cycle completed successfully"
