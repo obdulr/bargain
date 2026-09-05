@@ -75,6 +75,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="impact-site-verification" content="c2aacb17-49a0-4116-b515-be1a7e596103" />
         <meta name="Impact-Site-Verification" content="c2aacb17-49a0-4116-b515-be1a7e596103" />
+        <meta name="impact-site-verification" content="566d9ee4-d392-4d5c-9123-f95164f06883" />
       </head>
       <body className="min-h-full flex flex-col">
         {/* Impact tracking script for affiliate verification */}
