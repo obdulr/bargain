@@ -987,6 +987,18 @@ async def scrape_impact_deals_public(
                     deals_saved += 1
                     continue
 
+                # Skip deals that were recently posted (within 7 days) even if
+                # they expired — re-creating them would cause duplicate posts.
+                deal_url = deal.get("deal_url", "")
+                if deal_url:
+                    recently_posted_url = db.query(ArbitrageDeal).filter(
+                        ArbitrageDeal.buy_url == deal_url,
+                        ArbitrageDeal.alerted_at != None,
+                        ArbitrageDeal.alerted_at > datetime.utcnow() - timedelta(days=7),
+                    ).first()
+                    if recently_posted_url:
+                        continue
+
                 new_deal = ArbitrageDeal(
                     asin=deal_id,
                     title=deal.get("title", "")[:500],
@@ -1092,8 +1104,11 @@ async def post_new_deals_to_x_public(
 
     Only posts deals that have affiliate tracking links.
     Posts to X, Instagram, and Facebook via Buffer.
+    Includes 7-day title + URL dedup to prevent duplicate posts across
+    both the in-process scheduler and GitHub Actions workflow.
     """
     from app.services.x_poster import post_deal_to_x, is_configured
+    import re
 
     if not is_configured():
         raise HTTPException(
@@ -1109,7 +1124,7 @@ async def post_new_deals_to_x_public(
             ArbitrageDeal.alerted_at == None,
         )
         .order_by(ArbitrageDeal.detected_at.desc())
-        .limit(max_posts * 3)  # Fetch more to filter for affiliate links
+        .limit(max_posts * 5)  # Fetch more to allow for dedup filtering
         .all()
     )
 
@@ -1118,6 +1133,53 @@ async def post_new_deals_to_x_public(
 
     if not affiliate_deals:
         return {"posted": 0, "status": "success", "message": "No new deals with affiliate links to post"}
+
+    # ─── 7-day dedup: skip deals matching recently posted titles or URLs ───
+    dedup_cutoff = datetime.utcnow() - timedelta(days=7)
+    recently_posted = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.alerted_at != None,
+        ArbitrageDeal.alerted_at > dedup_cutoff,
+    ).all()
+
+    recently_posted_titles = {" ".join((d.title or "").lower().split()) for d in recently_posted}
+    recently_posted_skus = set()
+    recently_posted_asins = set()
+    for d in recently_posted:
+        url = (d.buy_url or "").lower()
+        sku_match = re.search(r'prodsku[=:](\w+)', url)
+        asin_match = re.search(r'(/dp/|/ip/)(\w+)', url)
+        if sku_match:
+            recently_posted_skus.add(sku_match.group(1))
+        elif asin_match:
+            recently_posted_asins.add(asin_match.group(2))
+
+    deduped_deals = []
+    skipped_dedup = 0
+    for d in affiliate_deals:
+        title_key = " ".join((d.title or "").lower().split())
+        url = (d.buy_url or "").lower()
+        if title_key in recently_posted_titles:
+            skipped_dedup += 1
+            continue
+        sku_match = re.search(r'prodsku[=:](\w+)', url)
+        asin_match = re.search(r'(/dp/|/ip/)(\w+)', url)
+        sku = sku_match.group(1) if sku_match else None
+        asin = asin_match.group(2) if asin_match else None
+        if sku and sku in recently_posted_skus:
+            skipped_dedup += 1
+            continue
+        if asin and asin in recently_posted_asins:
+            skipped_dedup += 1
+            continue
+        deduped_deals.append(d)
+
+    if skipped_dedup:
+        logger.info(f"post-new-to-x: skipped {skipped_dedup} deals (7-day title+URL dedup)")
+
+    affiliate_deals = deduped_deals
+
+    if not affiliate_deals:
+        return {"posted": 0, "status": "success", "message": "No new deals to post (all recently posted)"}
 
     results = []
     posted = 0
@@ -1156,6 +1218,7 @@ async def post_new_deals_to_x_public(
     return {
         "posted": posted,
         "total": len(deals_to_post),
+        "skipped_dedup": skipped_dedup,
         "results": results,
         "status": "success",
     }

@@ -404,6 +404,19 @@ class ScanScheduler:
                                 impact_saved += 1
                                 continue
 
+                            # Skip deals that were recently posted (within 7
+                            # days) even if they expired — re-creating them
+                            # would cause duplicate social posts.
+                            deal_url = deal.get("deal_url", "")
+                            if deal_url:
+                                recently_posted = db.query(ArbitrageDeal).filter(
+                                    ArbitrageDeal.buy_url == deal_url,
+                                    ArbitrageDeal.alerted_at != None,
+                                    ArbitrageDeal.alerted_at > datetime.utcnow() - timedelta(days=7),
+                                ).first()
+                                if recently_posted:
+                                    continue
+
                             new_deal = ArbitrageDeal(
                                 asin=deal_id,
                                 title=deal.get("title", "")[:500],
