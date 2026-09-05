@@ -148,11 +148,18 @@ async def list_public_deals(
         and (Decimal(str(d.historical_avg)) - Decimal(str(d.buy_price))) / Decimal(str(d.historical_avg)) >= min_discount
     ]
 
+    # Filter out non-English (French/German/Spanish/Italian) product titles.
+    # These slip in from ADOR's localized catalog entries despite scrape-time
+    # filtering — older deals saved before the filter was added still show up.
+    from app.services.impact_api import _is_non_english_title
+    filtered = [d for d in filtered if not _is_non_english_title(d.title or "")]
+
     # Deduplicate by title (keep first occurrence — highest net_profit since sorted)
+    # Use a normalized key: first 80 chars, lowercased, with extra whitespace removed
     seen_titles = set()
     unique_deals = []
     for d in filtered:
-        title_key = (d.title or "")[:80].lower().strip()
+        title_key = " ".join((d.title or "")[:80].lower().split())
         if title_key and title_key not in seen_titles:
             seen_titles.add(title_key)
             unique_deals.append(d)
@@ -1151,6 +1158,39 @@ async def post_new_deals_to_x_public(
         "total": len(deals_to_post),
         "results": results,
         "status": "success",
+    }
+
+
+@router.post("/deals/cleanup-non-english/public", response_model=dict)
+async def cleanup_non_english_deals_public(
+    db: Session = Depends(get_db),
+):
+    """Expire non-English (French/German/Spanish/Italian) deals from the database.
+
+    Scans active deals and marks any with non-English titles as expired.
+    This cleans up localized ADOR products that were saved before the
+    language filter was added to the scrape pipeline.
+    No auth required — safe to call from GitHub Actions or manually.
+    """
+    from app.services.impact_api import _is_non_english_title
+
+    active_deals = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.status == "active",
+    ).all()
+
+    expired_count = 0
+    for deal in active_deals:
+        if _is_non_english_title(deal.title or ""):
+            deal.status = "expired"
+            expired_count += 1
+
+    if expired_count:
+        db.commit()
+
+    return {
+        "status": "success",
+        "expired": expired_count,
+        "message": f"Expired {expired_count} non-English deals",
     }
 
 

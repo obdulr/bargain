@@ -67,12 +67,38 @@ NON_ENGLISH_TITLE_KEYWORDS = (
     "hut", "mütze", "schal", "handschuhe", "unterwäsche", "bikini",
     "bademode", "nachtwäsche", "hausanzug", "pyjama", "morgenmantel",
     # French
-    "femme", "homme", "enfant", "robe", "pantalon", "chemise", "veste",
-    "manteau", "jupe", "blouse", "chaussures", "bottes", "sac",
+    "femme", "femmes", "homme", "hommes", "enfant", "enfants", "robe",
+    "pantalon", "chemise", "chemisier", "veste", "manteau", "jupe",
+    "blouse", "chaussures", "bottes", "sac", "camisole", "tissu",
+    "ourlet", "ondulé", "décontractée", "décontracté", "élégant",
+    "élégante", "sans", "manches", "manche", "col", "taille", "haute",
+    "étroit", "large", "satin", "imprimé", "imprimée", "fleurs",
+    "fleur", "vacances", "travail", "quotidien", "été", "printemps",
+    "automne", "hiver", "coton", "lin", "laine", "soie", "cuir",
+    "d'été", "d'automne", "d'hiver", "découpe", "bouton", "boutonné",
+    "pas cher", "pour femme", "pour homme",
     # Spanish
-    "mujer", "hombre", "niño", "vestido", "pantalón", "camisa",
+    "mujer", "mujeres", "hombre", "hombres", "niño", "niña", "niños",
+    "vestido", "vestidos", "pantalón", "pantalones", "camisa", "camisas",
+    "chaqueta", "abrigo", "falda", "faldas", "blusa", "blusas",
+    "zapatos", "bolsa", "barato", "para mujer", "para hombre",
     # Italian
-    "donna", "uomo", "bambino", "vestito", "pantaloni", "camicia",
+    "donna", "donne", "uomo", "uomini", "bambino", "bambina",
+    "vestito", "vestiti", "pantaloni", "camicia", "camicie",
+    "giacca", "cappotto", "gonna", "gonne", "blusa", "bluse",
+    "scarpe", "borsa", "borse", "economico",
+)
+
+# Strongly indicative non-English words — even 1 match means non-English
+NON_ENGLISH_STRONG_KEYWORDS = (
+    "femmes", "décontractée", "décontracté", "élégante", "élégant",
+    "ourlet", "ondulé", "camisole", "imprimé", "imprimée",
+    "echancré", "échancré", "rayures", "géométriques", "geometriques",
+    "tissu", "pour femme", "pour homme", "d'été", "d'automne",
+    "quotidien", "vacances", "printemps", "automne",
+    "damen", "weiblich", "herren", "männlich",
+    "mujeres", "para mujer", "para hombre",
+    "donne", "uomini",
 )
 
 
@@ -81,12 +107,17 @@ def _is_non_english_title(title: str) -> bool:
 
     Checks for common German/French/Spanish/Italian clothing keywords
     that ADOR and similar catalogs include in localized product names.
+    A single strong keyword match is enough; otherwise 2+ regular matches.
     """
     if not title:
         return False
     title_lower = title.lower()
+    # Strong keywords — even 1 match means non-English
+    for kw in NON_ENGLISH_STRONG_KEYWORDS:
+        if kw in title_lower:
+            return True
+    # Regular keywords — 2+ matches means likely non-English
     matches = sum(1 for kw in NON_ENGLISH_TITLE_KEYWORDS if kw in title_lower)
-    # 2+ non-English keywords = very likely localized
     return matches >= 2
 
 
