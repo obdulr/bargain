@@ -13,16 +13,38 @@ permissions:
 
 jobs:
   scrape-and-post:
-    name: Trigger deal posting to X
+    name: Scrape Impact deals & post to X
     runs-on: ubuntu-latest
     steps:
+      - name: Scrape Impact.com deals
+        run: |
+          echo "Scraping Impact.com deals at $(date -u)"
+
+          # Fetch discounted products and promo codes from joined Impact
+          # campaigns and save them to the database with affiliate links.
+          # No auth required — public endpoint.
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 10 \
+            "https://api.bargainhuntrs.com/api/v1/arbitrage/deals/scrape-impact/public")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Impact scrape HTTP Status: $HTTP_CODE"
+          echo "Impact scrape response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "WARNING: Impact scrape returned HTTP $HTTP_CODE — continuing to post existing deals"
+          fi
+
       - name: Post new deals to X via Buffer
         run: |
           echo "Triggering deal posting at $(date -u)"
 
           # The post-new-to-x/public endpoint posts already-scraped deals
           # that have affiliate links. No auth required.
-          # The Render scheduler (kept alive by health-check.yml) handles scraping.
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             --max-time 300 \
             --retry 3 \

@@ -916,6 +916,166 @@ def _has_affiliate_link(url: str) -> bool:
     return False
 
 
+@router.post("/deals/scrape-impact/public", response_model=dict)
+async def scrape_impact_deals_public(
+    db: Session = Depends(get_db),
+):
+    """Public endpoint to scrape Impact.com deals — no auth required.
+
+    Fetches discounted products and promo codes from joined Impact.com
+    campaigns and saves them to the database with affiliate tracking links.
+    Used by the GitHub Actions workflow to populate deals before posting.
+    """
+    from app.services.impact_api import (
+        fetch_all_impact_deals,
+        fetch_promo_codes,
+        is_configured as impact_configured,
+    )
+
+    if not impact_configured():
+        return {
+            "status": "error",
+            "error": "Impact.com not configured. Set IMPACT_ACCOUNT_SID and IMPACT_AUTH_TOKEN env vars.",
+            "deals_found": 0,
+            "deals_saved": 0,
+        }
+
+    results = {"status": "success", "deals": {}, "promo_codes": {}}
+
+    # Fetch product deals from Impact catalogs
+    try:
+        impact_deals = await fetch_all_impact_deals()
+        deals_saved = 0
+        deals_errors = 0
+
+        for deal in impact_deals:
+            try:
+                if not deal.get("deal_price") or not deal.get("title"):
+                    continue
+
+                deal_id = f"impact_{deal.get('campaign_id', '')}_{hashlib.md5(deal.get('title', '').encode()).hexdigest()[:12]}"[:36]
+
+                orig = deal.get("original_price") or 0
+                buy = deal.get("deal_price") or 0
+                if not buy or buy <= 0:
+                    continue
+
+                tier = "glitch" if (deal.get("discount_percent", 0) or 0) >= 75 else "clearance"
+
+                existing = db.query(ArbitrageDeal).filter(
+                    ArbitrageDeal.asin == deal_id,
+                    ArbitrageDeal.status == "active",
+                ).first()
+
+                if existing:
+                    existing.buy_price = buy
+                    existing.sell_price = orig if orig else buy
+                    existing.historical_avg = orig if orig else buy
+                    existing.image_url = deal.get("image_url") or existing.image_url
+                    existing.deal_tier = tier
+                    existing.net_profit = (orig - buy) if orig else 0
+                    existing.roi = float((orig - buy) / orig) if orig and orig > 0 else 0
+                    existing.detected_at = datetime.utcnow()
+                    db.commit()
+                    deals_saved += 1
+                    continue
+
+                new_deal = ArbitrageDeal(
+                    asin=deal_id,
+                    title=deal.get("title", "")[:500],
+                    image_url=deal.get("image_url"),
+                    buy_url=deal.get("deal_url"),
+                    buy_platform=deal.get("retailer", "unknown"),
+                    retailer=deal.get("retailer", "unknown"),
+                    deal_source="online",
+                    buy_price=buy,
+                    sell_platform="impact",
+                    sell_price=orig if orig else buy,
+                    historical_avg=orig if orig else buy,
+                    deal_tier=tier,
+                    net_profit=(orig - buy) if orig else 0,
+                    roi=float((orig - buy) / orig) if orig and orig > 0 else 0,
+                    is_profitable=True,
+                    status="active",
+                    detected_at=datetime.utcnow(),
+                )
+                db.add(new_deal)
+                db.commit()
+                deals_saved += 1
+            except Exception as e:
+                db.rollback()
+                deals_errors += 1
+                if deals_errors <= 3:
+                    logger.warning(f"Failed to save Impact deal: {e}")
+
+        results["deals"] = {
+            "found": len(impact_deals),
+            "saved": deals_saved,
+            "errors": deals_errors,
+        }
+    except Exception as e:
+        results["deals"] = {"error": str(e)}
+
+    # Fetch promo codes from Impact Ads endpoint
+    try:
+        promos = await fetch_promo_codes()
+        from app.db.models import CouponCode
+        promos_saved = 0
+        for promo in promos:
+            try:
+                if not promo.code or not promo.retailer:
+                    continue
+
+                existing = db.query(CouponCode).filter(
+                    CouponCode.code == promo.code,
+                    CouponCode.retailer == promo.retailer,
+                ).first()
+
+                if existing:
+                    existing.title = promo.title[:500]
+                    existing.description = promo.description
+                    existing.discount_type = promo.discount_type
+                    existing.discount_value = promo.discount_value
+                    existing.source = "impact_api"
+                    if promo.end_date:
+                        existing.expires_at = promo.end_date
+                    existing.scraped_at = datetime.utcnow()
+                    db.commit()
+                    promos_saved += 1
+                    continue
+
+                new_coupon = CouponCode(
+                    code=promo.code,
+                    retailer=promo.retailer,
+                    title=promo.title[:500],
+                    description=promo.description,
+                    discount_type=promo.discount_type,
+                    discount_value=promo.discount_value,
+                    product_url=promo.tracking_url,
+                    source="impact_api",
+                    source_url=promo.tracking_url,
+                    expires_at=promo.end_date,
+                    status="active",
+                    scraped_at=datetime.utcnow(),
+                )
+                db.add(new_coupon)
+                db.commit()
+                promos_saved += 1
+            except Exception as e:
+                db.rollback()
+                if promos_saved == 0:
+                    logger.warning(f"Failed to save Impact promo code: {e}")
+
+        results["promo_codes"] = {
+            "found": len(promos),
+            "saved": promos_saved,
+        }
+    except Exception as e:
+        results["promo_codes"] = {"error": str(e)}
+
+    return results
+
+
 @router.post("/deals/post-new-to-x/public", response_model=dict)
 async def post_new_deals_to_x_public(
     max_posts: int = Query(5, le=10),
