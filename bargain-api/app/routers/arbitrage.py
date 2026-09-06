@@ -1263,6 +1263,99 @@ async def cleanup_non_english_deals_public(
     }
 
 
+@router.post("/deals/cleanup-duplicates/public", response_model=dict)
+async def cleanup_duplicate_deals_public(
+    db: Session = Depends(get_db),
+):
+    """Remove duplicate deals from the database — no auth required.
+
+    Finds and expires duplicates based on:
+    1. Exact same buy_url (keeps the oldest deal, expires the rest)
+    2. Exact same normalized title (keeps the oldest, expires the rest)
+    3. Same ASIN (keeps the oldest, expires the rest)
+
+    Safe to call from GitHub Actions or manually.
+    """
+    import re
+    from collections import defaultdict
+
+    active_deals = db.query(ArbitrageDeal).filter(
+        ArbitrageDeal.status == "active",
+    ).order_by(ArbitrageDeal.detected_at.asc()).all()
+
+    expired_count = 0
+    expired_ids = []
+    reasons = {"url": 0, "title": 0, "asin": 0}
+
+    # Group by URL
+    url_groups = defaultdict(list)
+    for d in active_deals:
+        if d.buy_url:
+            url_groups[d.buy_url].append(d)
+
+    # Group by normalized title
+    def normalize_title(t):
+        return re.sub(r'[^a-z0-9 ]', '', (t or '').lower()).strip()
+
+    title_groups = defaultdict(list)
+    for d in active_deals:
+        key = normalize_title(d.title)
+        if key:
+            title_groups[key].append(d)
+
+    # Group by ASIN
+    asin_groups = defaultdict(list)
+    for d in active_deals:
+        if d.asin:
+            asin_groups[d.asin].append(d)
+
+    expired_set = set()
+
+    # Expire URL duplicates (keep oldest)
+    for url, deals in url_groups.items():
+        if len(deals) > 1:
+            for d in deals[1:]:
+                if d.id not in expired_set:
+                    d.status = "expired"
+                    expired_set.add(d.id)
+                    expired_ids.append(str(d.id))
+                    expired_count += 1
+                    reasons["url"] += 1
+
+    # Expire title duplicates (keep oldest)
+    for key, deals in title_groups.items():
+        if len(deals) > 1:
+            for d in deals[1:]:
+                if d.id not in expired_set:
+                    d.status = "expired"
+                    expired_set.add(d.id)
+                    expired_ids.append(str(d.id))
+                    expired_count += 1
+                    reasons["title"] += 1
+
+    # Expire ASIN duplicates (keep oldest)
+    for asin, deals in asin_groups.items():
+        if len(deals) > 1:
+            for d in deals[1:]:
+                if d.id not in expired_set:
+                    d.status = "expired"
+                    expired_set.add(d.id)
+                    expired_ids.append(str(d.id))
+                    expired_count += 1
+                    reasons["asin"] += 1
+
+    if expired_count:
+        db.commit()
+
+    return {
+        "status": "success",
+        "expired": expired_count,
+        "by_reason": reasons,
+        "expired_ids": expired_ids,
+        "message": f"Expired {expired_count} duplicate deals (url={reasons['url']}, title={reasons['title']}, asin={reasons['asin']})",
+    }
+
+
 @router.get("/affiliate-networks/status", response_model=dict)
 async def affiliate_networks_status():
     """Check which affiliate networks are configured.
