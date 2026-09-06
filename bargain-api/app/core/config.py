@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     FACEBOOK_PAGE_ACCESS_TOKEN: str = ""
     FACEBOOK_PAGE_ID: str = ""
 
+    # Instagram (via Meta Graph API — requires linked IG Business account)
+    INSTAGRAM_BUSINESS_ACCOUNT_ID: str = ""  # IG business account ID from Graph API
+
     # Firebase Cloud Messaging (push notifications)
     FIREBASE_PROJECT_ID: str = ""
     FIREBASE_CLIENT_EMAIL: str = ""

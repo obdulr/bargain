@@ -1103,17 +1103,21 @@ async def post_new_deals_to_x_public(
     """Post deals that haven't been posted to social media yet — no auth required.
 
     Only posts deals that have affiliate tracking links.
-    Posts to X, Instagram, and Facebook via Buffer.
-    Includes 7-day title + URL dedup to prevent duplicate posts across
-    both the in-process scheduler and GitHub Actions workflow.
+    Posts directly to X, Facebook, and Instagram via native APIs (bypassing
+    Buffer). Falls back to Buffer for any platform not configured for direct
+    posting. Includes 7-day title + URL dedup to prevent duplicate posts.
     """
-    from app.services.x_poster import post_deal_to_x, is_configured
+    from app.services.unified_direct_poster import (
+        post_deal_to_all_platforms,
+        _any_direct_configured,
+        _buffer_configured,
+    )
     import re
 
-    if not is_configured():
+    if not _any_direct_configured() and not _buffer_configured():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Posting not configured. Set BUFFER_API_KEY env var.",
+            detail="No posting configured. Set X_API_KEY/X_ACCESS_TOKEN for direct posting, or BUFFER_API_KEY for Buffer.",
         )
 
     deals_to_post = (
@@ -1188,7 +1192,7 @@ async def post_new_deals_to_x_public(
         if deal.historical_avg and deal.historical_avg > deal.buy_price:
             discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
 
-        result = await post_deal_to_x(
+        result = await post_deal_to_all_platforms(
             title=deal.title,
             deal_price=float(deal.buy_price),
             original_price=float(deal.historical_avg) if deal.historical_avg else None,
@@ -1197,6 +1201,7 @@ async def post_new_deals_to_x_public(
             deal_url=deal.buy_url or "",
             deal_tier=deal.deal_tier,
             image_url=deal.image_url,
+            deal_id=str(deal.id),
         )
 
         if result.get("status") == "success":
@@ -1206,7 +1211,8 @@ async def post_new_deals_to_x_public(
             results.append({
                 "deal_id": str(deal.id),
                 "title": deal.title[:60],
-                "tweet_text": result.get("tweet_text", "")[:100],
+                "platforms": result.get("platforms_used", []),
+                "channels_posted": result.get("channels_posted", 0),
             })
         else:
             results.append({

@@ -603,23 +603,44 @@ class ScanScheduler:
                         if deal.historical_avg and deal.historical_avg > deal.buy_price:
                             discount = int(round((1 - float(deal.buy_price) / float(deal.historical_avg)) * 100))
 
-                        result = await post_deal_to_x(
-                            title=deal.title,
-                            deal_price=float(deal.buy_price),
-                            original_price=float(deal.historical_avg) if deal.historical_avg else None,
-                            discount_percent=discount,
-                            retailer=getattr(deal, "retailer", None) or "amazon",
-                            deal_url=deal.buy_url or "",
-                            deal_tier=deal.deal_tier,
-                            image_url=deal.image_url,
-                            deal_id=str(deal.id),
+                        # Use unified direct poster (X + FB + IG native APIs)
+                        # with Buffer fallback for unconfigured platforms
+                        from app.services.unified_direct_poster import (
+                            post_deal_to_all_platforms,
+                            _any_direct_configured,
                         )
+
+                        if _any_direct_configured():
+                            result = await post_deal_to_all_platforms(
+                                title=deal.title,
+                                deal_price=float(deal.buy_price),
+                                original_price=float(deal.historical_avg) if deal.historical_avg else None,
+                                discount_percent=discount,
+                                retailer=getattr(deal, "retailer", None) or "amazon",
+                                deal_url=deal.buy_url or "",
+                                deal_tier=deal.deal_tier,
+                                image_url=deal.image_url,
+                                deal_id=str(deal.id),
+                            )
+                        else:
+                            result = await post_deal_to_x(
+                                title=deal.title,
+                                deal_price=float(deal.buy_price),
+                                original_price=float(deal.historical_avg) if deal.historical_avg else None,
+                                discount_percent=discount,
+                                retailer=getattr(deal, "retailer", None) or "amazon",
+                                deal_url=deal.buy_url or "",
+                                deal_tier=deal.deal_tier,
+                                image_url=deal.image_url,
+                                deal_id=str(deal.id),
+                            )
 
                         if result.get("status") == "success":
                             posted += 1
                             deal.alerted_at = datetime.utcnow()
                             db.commit()
-                            logger.info(f"  Posted: {deal.title[:50]}")
+                            platforms = result.get("platforms_used", [])
+                            logger.info(f"  Posted: {deal.title[:50]} ({', '.join(platforms) or 'buffer'})")
                         else:
                             logger.warning(f"  Post failed: {result.get('error')}")
 
