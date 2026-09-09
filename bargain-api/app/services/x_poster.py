@@ -286,59 +286,70 @@ async def clear_buffer_queue(channel_ids: Optional[list[str]] = None) -> dict:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             for cid in channel_ids:
-                # Fetch all scheduled posts for this channel
-                variables = {
-                    "input": {
-                        "organizationId": org_id,
-                        "filter": {
-                            "status": "scheduled",
-                            "channelIds": [cid],
+                # Fetch and delete all scheduled posts for this channel
+                # Buffer API caps results at 10 per query, so loop until empty
+                total_deleted = 0
+                total_found = 0
+                while True:
+                    variables = {
+                        "input": {
+                            "organizationId": org_id,
+                            "filter": {
+                                "status": "scheduled",
+                                "channelIds": [cid],
+                            },
                         },
                     }
-                }
-                resp = await client.post(
-                    BUFFER_API_URL,
-                    json={"query": list_query, "variables": variables},
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                )
-                if resp.status_code != 200:
-                    results[cid] = {"error": f"HTTP {resp.status_code}", "deleted": 0}
-                    continue
+                    resp = await client.post(
+                        BUFFER_API_URL,
+                        json={"query": list_query, "variables": variables},
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    if resp.status_code != 200:
+                        if total_found == 0:
+                            results[cid] = {"error": f"HTTP {resp.status_code}", "deleted": 0}
+                        break
 
-                data = resp.json()
-                if data.get("errors"):
-                    results[cid] = {"error": data["errors"][0].get("message", ""), "deleted": 0}
-                    continue
+                    data = resp.json()
+                    if data.get("errors"):
+                        if total_found == 0:
+                            results[cid] = {"error": data["errors"][0].get("message", ""), "deleted": 0}
+                        break
 
-                edges = data.get("data", {}).get("posts", {}).get("edges", [])
-                post_ids = [e["node"]["id"] for e in edges if e.get("node", {}).get("id")]
+                    edges = data.get("data", {}).get("posts", {}).get("edges", [])
+                    post_ids = [e["node"]["id"] for e in edges if e.get("node", {}).get("id")]
 
-                deleted = 0
-                for pid in post_ids:
-                    try:
-                        del_resp = await client.post(
-                            BUFFER_API_URL,
-                            json={
-                                "query": delete_mutation,
-                                "variables": {"input": {"id": pid}},
-                            },
-                            headers={
-                                "Authorization": f"Bearer {api_key}",
-                                "Content-Type": "application/json",
-                            },
-                        )
-                        if del_resp.status_code == 200:
-                            del_data = del_resp.json()
-                            if not del_data.get("errors"):
-                                deleted += 1
-                    except Exception:
-                        pass
+                    if not post_ids:
+                        break  # No more posts to delete
 
-                results[cid] = {"deleted": deleted, "total_found": len(post_ids)}
-                logger.info(f"Cleared {deleted}/{len(post_ids)} posts from Buffer channel {cid}")
+                    total_found += len(post_ids)
+
+                    for pid in post_ids:
+                        try:
+                            del_resp = await client.post(
+                                BUFFER_API_URL,
+                                json={
+                                    "query": delete_mutation,
+                                    "variables": {"input": {"id": pid}},
+                                },
+                                headers={
+                                    "Authorization": f"Bearer {api_key}",
+                                    "Content-Type": "application/json",
+                                },
+                            )
+                            if del_resp.status_code == 200:
+                                del_data = del_resp.json()
+                                if not del_data.get("errors"):
+                                    total_deleted += 1
+                        except Exception:
+                            pass
+
+                results[cid] = {"deleted": total_deleted, "total_found": total_found}
+                if total_deleted:
+                    logger.info(f"Cleared {total_deleted}/{total_found} posts from Buffer channel {cid}")
 
     except Exception as e:
         logger.error(f"Failed to clear Buffer queue: {e}")
