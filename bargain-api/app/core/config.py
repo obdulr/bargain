@@ -170,6 +170,10 @@ class Settings(BaseSettings):
     X_ACCESS_TOKEN: str = ""
     X_ACCESS_TOKEN_SECRET: str = ""
     X_BEARER_TOKEN: str = ""
+    # OAuth 2.0 (preferred — no need for Consumer Key/Secret)
+    X_OAUTH2_ACCESS_TOKEN: str = ""
+    X_OAUTH2_REFRESH_TOKEN: str = ""
+    X_CLIENT_ID: str = ""
 
     # Reddit API (free, instant approval)
     # Get credentials: https://www.reddit.com/prefs/apps (create "script" app)
