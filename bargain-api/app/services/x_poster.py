@@ -244,6 +244,108 @@ def _get_all_channel_ids() -> list[str]:
 
 def is_configured() -> bool:
     """Check if Buffer API is configured."""
+
+
+async def clear_buffer_queue(channel_ids: Optional[list[str]] = None) -> dict:
+    """Delete all scheduled posts from Buffer channels.
+
+    Used to clear clogged queues full of failed/stuck posts.
+    Returns counts of deleted posts per channel.
+    """
+    if not is_configured():
+        return {"status": "error", "error": "Buffer not configured"}
+
+    api_key = settings.BUFFER_API_KEY
+    org_id = getattr(settings, "BUFFER_ORG_ID", "")
+    if not org_id:
+        return {"status": "error", "error": "BUFFER_ORG_ID not set"}
+
+    if channel_ids is None:
+        channel_ids = _get_all_channel_ids()
+
+    if not channel_ids:
+        return {"status": "error", "error": "No channel IDs configured"}
+
+    list_query = """
+    query ListPosts($input: PostsInput!) {
+      posts(input: $input) {
+        edges { node { id } }
+      }
+    }
+    """
+
+    delete_mutation = """
+    mutation DeletePost($input: DeletePostInput!) {
+      deletePost(input: $input) {
+        success
+      }
+    }
+    """
+
+    results = {}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for cid in channel_ids:
+                # Fetch all scheduled posts for this channel
+                variables = {
+                    "input": {
+                        "organizationId": org_id,
+                        "filter": {
+                            "status": "scheduled",
+                            "channelIds": [cid],
+                        },
+                    }
+                }
+                resp = await client.post(
+                    BUFFER_API_URL,
+                    json={"query": list_query, "variables": variables},
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                if resp.status_code != 200:
+                    results[cid] = {"error": f"HTTP {resp.status_code}", "deleted": 0}
+                    continue
+
+                data = resp.json()
+                if data.get("errors"):
+                    results[cid] = {"error": data["errors"][0].get("message", ""), "deleted": 0}
+                    continue
+
+                edges = data.get("data", {}).get("posts", {}).get("edges", [])
+                post_ids = [e["node"]["id"] for e in edges if e.get("node", {}).get("id")]
+
+                deleted = 0
+                for pid in post_ids:
+                    try:
+                        del_resp = await client.post(
+                            BUFFER_API_URL,
+                            json={
+                                "query": delete_mutation,
+                                "variables": {"input": {"id": pid}},
+                            },
+                            headers={
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json",
+                            },
+                        )
+                        if del_resp.status_code == 200:
+                            del_data = del_resp.json()
+                            if not del_data.get("errors"):
+                                deleted += 1
+                    except Exception:
+                        pass
+
+                results[cid] = {"deleted": deleted, "total_found": len(post_ids)}
+                logger.info(f"Cleared {deleted}/{len(post_ids)} posts from Buffer channel {cid}")
+
+    except Exception as e:
+        logger.error(f"Failed to clear Buffer queue: {e}")
+        return {"status": "error", "error": str(e), "results": results}
+
+    total_deleted = sum(r.get("deleted", 0) for r in results.values())
+    return {"status": "success", "total_deleted": total_deleted, "results": results}
     return bool(getattr(settings, "BUFFER_API_KEY", "")) and \
            bool(getattr(settings, "BUFFER_CHANNEL_ID", ""))
 

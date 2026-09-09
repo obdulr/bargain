@@ -1387,6 +1387,18 @@ async def cleanup_duplicate_deals_public(
     }
 
 
+@router.post("/buffer/clear-queue/public", response_model=dict)
+async def clear_buffer_queue_public():
+    """Delete all scheduled posts from Buffer to clear clogged queues.
+
+    No auth required — called manually when Buffer queue is full of
+    failed/stuck posts that need to be cleared before new posts can flow.
+    """
+    from app.services.x_poster import clear_buffer_queue
+    result = await clear_buffer_queue()
+    return result
+
+
 @router.get("/affiliate-networks/status", response_model=dict)
 async def affiliate_networks_status():
     """Check which affiliate networks are configured.
