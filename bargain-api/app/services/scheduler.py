@@ -591,6 +591,14 @@ class ScanScheduler:
                 for d in candidate_deals:
                     url = (d.buy_url or "").lower()
                     if any(x in url for x in affiliate_domains):
+                        # Skip deals without real product images
+                        img = d.image_url or ""
+                        if not img or "/deals/placeholder/" in img or img.endswith(".svg"):
+                            continue
+                        # Skip non-English deals
+                        from app.services.impact_api import _is_non_english_title
+                        if _is_non_english_title(d.title or ""):
+                            continue
                         new_deals.append(d)
                     if len(new_deals) >= max_posts:
                         break

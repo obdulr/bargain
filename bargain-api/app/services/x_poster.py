@@ -406,25 +406,37 @@ async def _post_to_channel(api_key: str, channel_id: str, text: str, image_url: 
     # Instagram requires at least one image
     # Facebook works better with an image too
     # X/Twitter also gets images for better engagement
-    # Verify the image URL before sending to Buffer; fall back to a branded
-    # image if the deal image is missing or fails verification.
+    # Verify the image URL before sending to Buffer.
+    # If the deal image fails verification, skip the image entirely for X
+    # (text-only post) and skip the channel for Instagram/Facebook (they
+    # require images). Do NOT fall back to a branding image — only post
+    # real product images.
     #
     # Facebook's crawlers are frequently blocked by retailer CDNs (Amazon,
-    # Walmart, etc.), so always use the branded fallback for Facebook to
-    # avoid "Missing or invalid image file" errors.
+    # Walmart, etc.), so skip Facebook if we can't verify the image.
     if service == "facebook":
-        img_to_use = FACEBOOK_FALLBACK_IMAGE_URL
+        # Facebook often can't fetch retailer CDN images — skip FB entirely
+        # rather than posting with a branding image
+        if image_url and await _verify_image_url(image_url):
+            img_to_use = image_url
+        else:
+            logger.info(f"Skipping Facebook — no verifiable product image")
+            return {"status": "skipped", "error": "No verifiable product image for Facebook", "channel_id": channel_id, "service": service}
     else:
         img_to_use = image_url
         if img_to_use:
             if not await _verify_image_url(img_to_use):
                 logger.warning(
-                    f"Image verification failed for {service}, using fallback image"
+                    f"Image verification failed for {service}, posting without image"
                 )
-                img_to_use = FALLBACK_IMAGE_URL
+                img_to_use = None
         else:
-            # No image provided — use the branded fallback for all services
-            img_to_use = FALLBACK_IMAGE_URL
+            img_to_use = None
+
+    # Instagram requires an image — skip if none
+    if service == "instagram" and not img_to_use:
+        logger.info(f"Skipping Instagram — no verifiable product image")
+        return {"status": "skipped", "error": "No verifiable product image for Instagram", "channel_id": channel_id, "service": service}
 
     if img_to_use:
         input_data["assets"] = [{"image": {"url": img_to_use}}]

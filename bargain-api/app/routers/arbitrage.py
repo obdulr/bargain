@@ -1135,8 +1135,37 @@ async def post_new_deals_to_x_public(
     # Only post deals with affiliate links
     affiliate_deals = [d for d in deals_to_post if _has_affiliate_link(d.buy_url)]
 
+    # Only post deals with real product images (not placeholders, SVGs, or missing)
+    def _has_real_image(deal) -> bool:
+        img = deal.image_url or ""
+        if not img:
+            return False
+        if "/deals/placeholder/" in img:
+            return False
+        if img.endswith(".svg") or "svg" in img.lower():
+            return False
+        if img in ("None", "null", ""):
+            return False
+        return True
+
+    deals_with_images = [d for d in affiliate_deals if _has_real_image(d)]
+    skipped_no_image = len(affiliate_deals) - len(deals_with_images)
+    affiliate_deals = deals_with_images
+
+    # Skip non-English deals (German, French, Spanish, Italian, etc.)
+    from app.services.impact_api import _is_non_english_title
+    deals_english = [d for d in affiliate_deals if not _is_non_english_title(d.title or "")]
+    skipped_non_english = len(affiliate_deals) - len(deals_english)
+    affiliate_deals = deals_english
+
     if not affiliate_deals:
-        return {"posted": 0, "status": "success", "message": "No new deals with affiliate links to post"}
+        return {
+            "posted": 0,
+            "status": "success",
+            "skipped_no_image": skipped_no_image,
+            "skipped_non_english": skipped_non_english,
+            "message": "No new deals with affiliate links and real images to post",
+        }
 
     # ─── 7-day dedup: skip deals matching recently posted titles or URLs ───
     dedup_cutoff = datetime.utcnow() - timedelta(days=7)
@@ -1225,6 +1254,8 @@ async def post_new_deals_to_x_public(
         "posted": posted,
         "total": len(deals_to_post),
         "skipped_dedup": skipped_dedup,
+        "skipped_no_image": skipped_no_image,
+        "skipped_non_english": skipped_non_english,
         "results": results,
         "status": "success",
     }
