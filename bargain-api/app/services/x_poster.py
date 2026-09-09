@@ -346,6 +346,10 @@ async def clear_buffer_queue(channel_ids: Optional[list[str]] = None) -> dict:
 
     total_deleted = sum(r.get("deleted", 0) for r in results.values())
     return {"status": "success", "total_deleted": total_deleted, "results": results}
+
+
+def is_configured() -> bool:
+    """Check if Buffer API is configured."""
     return bool(getattr(settings, "BUFFER_API_KEY", "")) and \
            bool(getattr(settings, "BUFFER_CHANNEL_ID", ""))
 
