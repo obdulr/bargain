@@ -277,7 +277,7 @@ async def clear_buffer_queue(channel_ids: Optional[list[str]] = None) -> dict:
     delete_mutation = """
     mutation DeletePost($input: DeletePostInput!) {
       deletePost(input: $input) {
-        success
+        __typename
       }
     }
     """
