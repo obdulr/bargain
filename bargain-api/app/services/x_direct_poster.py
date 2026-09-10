@@ -56,7 +56,13 @@ def _has_oauth1() -> bool:
 
 
 def is_configured() -> bool:
-    """Check if X direct posting is configured (OAuth 2.0 or OAuth 1.0a)."""
+    """Check if X direct posting is configured and enabled.
+
+    Requires both credentials and X_DIRECT_ENABLED env var (defaults to
+    false until X API credits are purchased).
+    """
+    if not getattr(settings, "X_DIRECT_ENABLED", False):
+        return False
     return _has_oauth2() or _has_oauth1()
 
 

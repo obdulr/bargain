@@ -286,20 +286,21 @@ async def clear_buffer_queue(channel_ids: Optional[list[str]] = None) -> dict:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             for cid in channel_ids:
-                # Fetch and delete all scheduled posts for this channel
+                # Fetch and delete all scheduled AND error posts for this channel
                 # Buffer API caps results at 10 per query, so loop until empty
                 total_deleted = 0
                 total_found = 0
-                while True:
-                    variables = {
-                        "input": {
-                            "organizationId": org_id,
-                            "filter": {
-                                "status": "scheduled",
-                                "channelIds": [cid],
+                for post_status in ("scheduled", "error"):
+                    while True:
+                        variables = {
+                            "input": {
+                                "organizationId": org_id,
+                                "filter": {
+                                    "status": post_status,
+                                    "channelIds": [cid],
+                                },
                             },
-                        },
-                    }
+                        }
                     resp = await client.post(
                         BUFFER_API_URL,
                         json={"query": list_query, "variables": variables},

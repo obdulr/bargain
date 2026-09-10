@@ -174,6 +174,7 @@ class Settings(BaseSettings):
     X_OAUTH2_ACCESS_TOKEN: str = ""
     X_OAUTH2_REFRESH_TOKEN: str = ""
     X_CLIENT_ID: str = ""
+    X_DIRECT_ENABLED: str = ""  # Set to "true" to enable direct X posting (requires X API credits)
 
     # Reddit API (free, instant approval)
     # Get credentials: https://www.reddit.com/prefs/apps (create "script" app)
