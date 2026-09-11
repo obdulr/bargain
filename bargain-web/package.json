@@ -7,7 +7,11 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint",
-    "clean": "rm -rf .next node_modules"
+    "clean": "rm -rf .next node_modules",
+    "preview": "opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare deploy",
+    "build:cf": "next build --webpack && find .next -name '._*' -delete && opennextjs-cloudflare build --skipNextBuild --dangerouslyUseUnsupportedNextVersion",
+    "cf-typegen": "opennextjs-cloudflare cf-typegen"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",

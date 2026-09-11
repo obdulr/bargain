@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "bargain-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    { "pattern": "bargainhuntrs.com", "custom_domain": true },
+    { "pattern": "www.bargainhuntrs.com", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "vars": {
+    "NEXT_PUBLIC_API_URL": "https://api.bargainhuntrs.com",
+    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51TwveLGlmkIVHbkRWRzHZ1CpZUjla6n0DjTvEJUbyRRZpgfdXEg5eBjxmME1NINcSEW2m8ih2934Yg6GdkSdYyn100aOo8w2AP",
+    "NEXT_PUBLIC_FIREBASE_API_KEY": "AIzaSyDWt8Zk1t0mjmDOP0QszVBbPG2a4Tnnx58",
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "bargainhuntrs-a57ec.firebaseapp.com",
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "bargainhuntrs-a57ec",
+    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "bargainhuntrs-a57ec.firebasestorage.app",
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "809115335784",
+    "NEXT_PUBLIC_FIREBASE_APP_ID": "1:809115335784:web:a41b07b345655901498fdd",
+    "NEXT_PUBLIC_FIREBASE_VAPID_KEY": "BHqH0qRUJZ6SHQYSaoIiYErjUhShlpa1cBspHv8xxE2gz4fCPmMw9Y-ItRRWiMg4fUJiCeX4hlJ0TlNNIDYOZ8E"
+  }
+}
